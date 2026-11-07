@@ -1,7 +1,7 @@
 // Shared app state for the 3 views: the server's view, language helpers,
 // the screen-reader announcer, and shared actions.
 
-import { createContext, useContext } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import type { Lang, View } from "./api";
 import type { I18n } from "./i18n";
 
@@ -34,4 +34,17 @@ export function useApp(): AppCtx {
 /** Move focus to an element by id after React has rendered it. */
 export function focusLater(id: string) {
   requestAnimationFrame(() => requestAnimationFrame(() => document.getElementById(id)?.focus()));
+}
+
+/** True while a CSS media query matches (e.g. landscape tablet). Updates on rotate/resize. */
+export function useMediaQuery(query: string) {
+  const [matches, setMatches] = useState(() => typeof window !== "undefined" && window.matchMedia(query).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(query);
+    const update = () => setMatches(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, [query]);
+  return matches;
 }

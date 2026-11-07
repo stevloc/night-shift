@@ -1,11 +1,13 @@
-// Sign-in: "Try the demo" (anonymous) or a magic link by email. Every visitor gets their own demo restaurant.
+// Sign-in: "Try the demo" (anonymous) or, when EMAIL_SIGNIN=true, a magic link by email.
+// Every visitor gets their own demo restaurant. Email is off by default: Supabase's built-in mailer is
+// rate-limited and only delivers to team members, so it needs custom SMTP first.
 
 import { useId, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { I18n } from "../i18n";
 import { Icon } from "../components/Icon";
 
-export function SignIn({ supabase, i18n }: { supabase: SupabaseClient; i18n: I18n }) {
+export function SignIn({ supabase, i18n, emailSignin }: { supabase: SupabaseClient; i18n: I18n; emailSignin: boolean }) {
   const { t } = i18n;
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
@@ -52,7 +54,7 @@ export function SignIn({ supabase, i18n }: { supabase: SupabaseClient; i18n: I18
         <p className="hint row"><Icon name="info" size={16} />{t("demo_notice")}</p>
       </section>
 
-      <section className="card stack" aria-labelledby="email-title">
+      {emailSignin && <section className="card stack" aria-labelledby="email-title">
         <h2 id="email-title">{t("signin_email_title")}</h2>
         {sent ? (
           <p className="notice" role="status"><Icon name="checkCircle" />{t("link_sent", { email: email.trim() })}</p>
@@ -69,7 +71,8 @@ export function SignIn({ supabase, i18n }: { supabase: SupabaseClient; i18n: I18
           </form>
         )}
         {error && <p id={errorId} className="field-error" role="alert"><Icon name="alert" size={18} />{error}</p>}
-      </section>
+      </section>}
+      {!emailSignin && error && <p className="field-error" role="alert"><Icon name="alert" size={18} />{error}</p>}
     </div>
   );
 }

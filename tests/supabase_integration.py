@@ -118,7 +118,7 @@ assert app.get("/api/state").status_code == 401
 assert app.get("/api/state", headers={"Authorization": "Bearer nonsense"}).status_code == 401
 other_key = ec.generate_private_key(ec.SECP256R1())
 assert app.get("/api/state", headers={"Authorization": f"Bearer {token_for(str(uuid.uuid4()), other_key)}"}).status_code == 401
-assert app.get("/api/config").json() == {"auth": True, "supabaseUrl": URL, "supabaseAnonKey": ANON}
+assert app.get("/api/config").json() == {"auth": True, "supabaseUrl": URL, "supabaseAnonKey": ANON, "emailSignin": False}
 print("ok  401 without/with bad tokens; /api/config exposes only URL + anon key")
 
 # 2. first sign-in seeds the demo restaurant

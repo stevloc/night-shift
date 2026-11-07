@@ -145,6 +145,7 @@ product, reviewed the output, and tested the app; the AI wrote much of the code 
 | `CRON_SECRET` | a long random string (`openssl rand -hex 32`) |
 | `OPENROUTER_API_KEY` | optional, for reading new uploads with AI |
 | `OPENROUTER_MODEL` | optional, default `anthropic/claude-sonnet-5.5` |
+| `EMAIL_SIGNIN` | optional, `true` shows "Sign in with email" (set up custom SMTP in Supabase first). Default: off, "Try the demo" only |
 
 Service settings: Language **Docker**, Dockerfile path `./Dockerfile`, build context `.`, Instance **Free**,
 Health check path `/api/health`, start command blank (the Dockerfile reads `$PORT`), auto-deploy on commit.

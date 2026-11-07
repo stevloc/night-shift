@@ -180,7 +180,8 @@ def public_config():
     """What the browser may know: the Supabase URL and the anon (public) key, for sign-in only."""
     if not CONFIG.supabase_enabled:
         return {"auth": False}
-    return {"auth": True, "supabaseUrl": CONFIG.supabase_url, "supabaseAnonKey": CONFIG.supabase_anon_key}
+    return {"auth": True, "supabaseUrl": CONFIG.supabase_url, "supabaseAnonKey": CONFIG.supabase_anon_key,
+            "emailSignin": CONFIG.email_signin}
 
 
 @app.post("/api/nightly-run")

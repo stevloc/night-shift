@@ -6,6 +6,9 @@ import type { Lang, Names } from "./api";
 
 const en = {
   skip: "Skip to main content",
+  dishes_today: "Your dishes",
+  selected_dish: "Selected dish: {dish}",
+  per_month_short: "{monthly}/mo",
   signin_title: "Your overnight back office",
   signin_intro: "Night Shift reads supplier invoices while you sleep and has your Morning Brief ready. Try it with a sample restaurant.",
   try_demo: "Try the demo",
@@ -424,6 +427,9 @@ export type Key = keyof typeof en;
 
 const es: Record<Key, string> = {
   skip: "Ir al contenido principal",
+  dishes_today: "Tus platos",
+  selected_dish: "Plato seleccionado: {dish}",
+  per_month_short: "{monthly}/mes",
   signin_title: "Tu oficina de noche",
   signin_intro: "Night Shift lee las facturas de tus proveedores mientras duermes y te deja listo el Resumen de la mañana. Pruébalo con un restaurante de ejemplo.",
   try_demo: "Probar la demo",

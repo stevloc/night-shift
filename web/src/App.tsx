@@ -58,11 +58,13 @@ export function App() {
   // Auth: "off" = local demo mode (no Supabase). Otherwise sign in first; every API call carries the token.
   const [auth, setAuth] = useState<"checking" | "off" | "signed-out" | "signed-in">("checking");
   const [supabase, setSupabase] = useState<SupabaseClient | null>(null);
+  const [emailSignin, setEmailSignin] = useState(false);   // off unless EMAIL_SIGNIN=true on the server
   useEffect(() => {
     let unsubscribe = () => {};
     api.config().then(async (cfg) => {
       if (!cfg.auth || !cfg.supabaseUrl || !cfg.supabaseAnonKey) { setAuth("off"); return; }
       const sb = supabaseClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
+      setEmailSignin(!!cfg.emailSignin);
       configureAuth(async () => (await sb.auth.getSession()).data.session?.access_token ?? null,
         () => { setView(null); setAuth("signed-out"); });
       const apply = (session: Session | null) => setAuth(session ? "signed-in" : "signed-out");
@@ -226,7 +228,7 @@ export function App() {
       <main id="main" tabIndex={-1}>
         <div className="shell">
           {auth === "signed-out" && supabase ? (
-            <SignIn supabase={supabase} i18n={i18n} />
+            <SignIn supabase={supabase} i18n={i18n} emailSignin={emailSignin} />
           ) : view ? (
             <AppContext.Provider value={{
               view, setView, lang, i18n, announce, uploadInvoice, uploading, runNightShift, running,

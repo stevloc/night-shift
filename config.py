@@ -6,6 +6,7 @@
     SUPABASE_ANON_KEY           public key, sent to the browser for sign-in only
     SUPABASE_SERVICE_ROLE_KEY   server-only key: the backend is the only thing that touches the DB
     CRON_SECRET                 shared secret for POST /api/nightly-run
+    EMAIL_SIGNIN                "true" shows "Sign in with email" (needs custom SMTP in Supabase); default off
 
 Secrets are never printed: repr() of Config hides them, and nothing logs os.environ.
 """
@@ -27,6 +28,7 @@ class Config:
     supabase_anon_key: str | None = field(default=None, repr=False)
     supabase_service_role_key: str | None = field(default=None, repr=False)
     cron_secret: str | None = field(default=None, repr=False)
+    email_signin: bool = False
 
     @property
     def supabase_enabled(self):
@@ -43,6 +45,7 @@ def load():
         supabase_anon_key=_env("SUPABASE_ANON_KEY"),
         supabase_service_role_key=_env("SUPABASE_SERVICE_ROLE_KEY"),
         cron_secret=_env("CRON_SECRET"),
+        email_signin=(_env("EMAIL_SIGNIN") or "").lower() in ("1", "true", "yes", "on"),
     )
 
 

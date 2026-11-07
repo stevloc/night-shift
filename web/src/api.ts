@@ -260,7 +260,7 @@ export const api = {
   lineImageUrl: (invoiceId: number, lineId: number) => `/api/invoices/${invoiceId}/lines/${lineId}/image`,
   /** A short-lived link to the whole invoice (a signed Storage URL in production). */
   invoiceImageLink: (invoiceId: number) => request<{ url: string }>(`/api/invoices/${invoiceId}/image-url`),
-  config: () => request<{ auth: boolean; supabaseUrl?: string; supabaseAnonKey?: string }>("/api/config"),
+  config: () => request<{ auth: boolean; supabaseUrl?: string; supabaseAnonKey?: string; emailSignin?: boolean }>("/api/config"),
   /** Download the bookkeeper CSV with the auth header (a plain link can't send it). */
   downloadCsv: async () => {
     const res = await authFetch("/api/export/bookkeeper.csv");

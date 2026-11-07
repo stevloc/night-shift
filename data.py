@@ -52,7 +52,7 @@ UNITS = {
 _settings = json.loads((DEMO / "settings.json").read_text())
 RESTAURANT_NAME = _settings["restaurant"]["name"]
 RESTAURANT_TZ = _settings["restaurant"].get("timezone", "America/New_York")   # Pittsburgh, PA
-OWNER_NAME = "Linh"
+OWNER_NAME = "Steven"
 COMMISSION_CHOICES = (15, 25, 30)
 
 # Spanish names (the dataset is English-only).
