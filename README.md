@@ -1,6 +1,6 @@
 # Night Shift 🌙
 
-**Live demo:** https://YOUR-SERVICE.onrender.com  *(replace after the first Render deploy)*
+**Live demo:** https://night-shift-r237.onrender.com/  *(free Render plan: the first load after idle can take ~1 minute to wake up)*
 
 An overnight back office for small restaurants (DoorDash "Back House" track). While the owner
 sleeps, Night Shift reads tonight's supplier invoices, checks them (totals, pack sizes, duplicates),
@@ -19,7 +19,8 @@ Every number can show where it came from.
 | Invoice checks: totals vs. line sums, pack-size parsing, duplicate detection (supplier + number + total), "Needs review" holds | "Overnight": you press **Run Night Shift**; the log uses a fixed overnight clock so every demo is identical |
 | AI invoice reading for **new** uploads (OpenRouter vision model), cached by file hash | Demo invoices are never sent to the AI: their known reading is in `invoices_extracted_fallback.json` |
 | Option comparison (keep / suggested / your price / your limit) and order-volume what-ifs (`options.py`) | Order-volume cases are hypothetical: there is no demand or price-elasticity data |
-| Optional AI decision review, one owner-triggered call, strictly validated (`review.py`) | No prepared or canned reviews: without a key the app says the review is unavailable |
+| "Investigate this alert": one bounded tool-using AI investigation over the app's own records and calculator (`investigate.py`) | No recorded or replayed investigations: without a key the app says it is unavailable |
+| Sample invoice upload (or **Take a photo** on a phone) read live by the AI | The sample invoice is fictional; the phone-photo version is **generated** from the PNG (`demo-data/test-invoices/`) |
 | Monthly forecast from order history (last 28 days ÷ 28 × 30.4) | Price scenarios assume unchanged order volume (labelled as such) |
 | Decision log, bookkeeper CSV export, per-visitor sandboxes | **No DoorDash connection.** Approving saves a decision; it never publishes a price |
 
@@ -85,8 +86,8 @@ replayed invoice can have a live review.
 
 "Before" always means **prices before tonight's run** (or your saved prices if Night Shift hasn't run).
 The current cost of each ingredient is the latest verified invoice line. If an ingredient changed twice
-(e.g. RM-20419 at $134.20, then NB-7731 at $140.00), the earlier invoice is shown as history, never as the
-current price. The brief, the dish card, the supplier panel, popovers, Dish Detail and the review all read
+(for example, two invoices for brisket on the same night), the earlier one is shown as history, never as
+the current price. The brief, the dish card, the supplier panel, popovers, Dish Detail and the review all read
 the same cost record (`engine.cost_record`).
 
 ## Run locally
@@ -145,20 +146,26 @@ python -m pytest -q tests      # or: python tests/test_expected_results.py
 
 ## 5-minute demo
 
-Before: `python api.py`, open the app, **Reset demo**. With `OPENROUTER_API_KEY` set, the AI reads
-the NB-7731 photo and writes the review live; without it, steps 1:00 and 3:00 show the honest
-"unavailable" path (both are worth showing).
+Live: https://night-shift-r237.onrender.com (or locally: `python api.py`). Use a fresh private window,
+press **Try the demo**, then **Reset demo** if anything is left over. Run Night Shift **once**: a second run
+makes tonight's prices the new "before", so the brisket change disappears from the comparison.
+
+The sample invoice is `demo-data/test-invoices/test_invoice_northbank_NB-7731.png` (also downloadable from
+Invoice Review → "Try a sample invoice"; a generated phone-photo version is next to it). It is not in the
+inbox, so the AI reads it live; without `OPENROUTER_API_KEY`, steps 0:45, 2:50 and 3:40 show the honest
+"unavailable" path instead (worth showing too).
 
 | Time | Do | Show |
 |---|---|---|
-| 0:00 | **Run Night Shift on tonight's inbox** → While You Slept | 3 invoices verified with evidence, 1 duplicate skipped, rice paper *Needs your input*, Brisket Pho *Proposed, not applied* |
-| 1:00 | Invoice Review → upload `test_invoice_northbank_NB-7731.png` (fresh invoice) | "Read by AI just now"; 2 × 20 lb at $140 = $280 matches the total; $7.00/lb, $10.00 usable/lb at 70% yield |
-| 1:40 | Morning Brief → Brisket Pho | **What changed**: $119.80 → $140.00 per 20 lb (↑ 16.9% vs. before tonight's run), current from NB-7731; RM-20419 $134.20 shown as historical. Left per order $6.36 → $5.84 (36.5%, target 38%) |
-| 2:20 | **Review my options** → largest increase `0.50`, note "I can raise the price by at most fifty cents, and I want to preserve the portion." | Option cards: keep $15.99 (36.5%), suggested $16.99 (38.8%, above your limit), your limit $16.49 (37.7%, below target); conflict notice; what-if table (orders unchanged / 5% / 10% fewer) and "about 6% fewer orders would erase the improvement", labelled hypothetical |
-| 3:00 | **Investigate this alert** | The checks it actually ran (e.g. compared accepted brisket purchases, checked the recipe, calculated a scenario), a "Ready for your review" finding with links to the invoice and recipe, scenario figures from the calculator. "This investigation changed nothing." (No key → the unavailable message; the comparison stays.) |
-| 3:40 | **Change price** → 16.49 → **Approve your price** | Labelled "Your price scenario … below your target (37.7%)"; decision log card; "Update this price in DoorDash Merchant Portal" (the real next step; Night Shift never publishes) |
-| 4:15 | Spring Rolls (missing rice-paper pack size) → **Investigate this alert** | Hold + previous cost disclosed; the investigation opens LP-5521, compares accepted rice-paper purchases, and asks one question ("Needs your confirmation"); the hold stays. Invoice Review → fix line → 10 packs × 50 sheets → Spring Rolls back to OK |
-| 4:45 | Refresh the page | Decision and log are still there; switch to **Español** to show the same flow |
+| 0:00 | Morning Brief → **Start here** guide → **Run Night Shift on tonight's inbox** | While You Slept: 3 invoices verified with evidence, 1 duplicate skipped, rice paper *Needs your input*, Brisket Pho *Proposed, not applied* |
+| 0:45 | Invoice Review → **Try a sample invoice** → download the PNG → upload it (on a phone: **Take a photo**) | "Read by AI just now"; NB-7731: 5 lines add up to the printed $407.75; chicken thigh $95.60 → $109.90 per 40 lb case (+15%), Thai basil +10%, pork shoulder +3% |
+| 1:30 | Morning Brief → Brisket Pho | **What changed**: brisket $119.80 → $134.20 per 20 lb (↑ 12% vs. before tonight's run), from RM-20419. Left per order $6.36 → $5.96 (37.3%; target 38%), about −$88 a month at unchanged orders. Tap any underlined number for its source |
+| 2:10 | **Review my options** → largest increase `0.50`, note "I can raise the price by at most fifty cents, and I want to preserve the portion." | Cards: keep $15.99 (37.3%, below target), suggested $16.99 (39.5%, above your limit), your limit $16.49 (38.4%, reaches target). What-if table, labelled hypothetical: about 6% fewer orders would erase the gain at $16.49. (Try `0.25`: $16.24 at 37.9% → the "limit vs. target" conflict) |
+| 2:50 | **Investigate this alert** | The checks it actually ran (e.g. accepted brisket purchases, the recipe, a calculated scenario), a finding with links to the evidence, scenario figures from the calculator. "This investigation changed nothing." |
+| 3:20 | **Change price** → 16.49 → **Approve your price** | Decision card in the log; "Update this price in DoorDash Merchant Portal" (Night Shift never publishes) |
+| 3:40 | Spring Rolls (held: rice paper has no pack size) → **Investigate this alert** | Previous cost disclosed; the investigation opens LP-5521, compares accepted rice-paper purchases and asks one question ("Needs your confirmation"); the hold stays |
+| 4:15 | Invoice Review → "RICE PAPER 22CM 1 CS" → **Fix this line** → 10 packs × 50 sheets | "= 500 sheets"; Spring Rolls recalculated and back to OK; logged "Owner confirmed …" |
+| 4:40 | Refresh, then switch to **Español** | Decisions are still there; the same flow in Spanish |
 
 ## How the math works (`margins.py`)
 
@@ -169,7 +176,7 @@ amount left        = DoorDash price − DoorDash fee (25%) − packaging ($0.50)
                      $15.99 − $4.00 − $0.50 − $5.51 = $5.99   (37.4%; target 38%)
 scenario           = smallest whole-dollar increase that reaches the target → $16.99
 change per order   = +$1 × (1 − 25%) = +$0.75
-monthly scenario   = $0.75 × 225 forecast orders = $168.75 ≈ ~$169
+monthly scenario   = $0.75 × 225 forecast orders = $168.75 ≈ about $169
 ```
 
 Math uses exact values and rounds to the cent only for display, so a displayed line can differ
@@ -192,6 +199,7 @@ from a displayed total by 1¢ (noted in the UI). This matches `expected_results.
 | `store.py` | Supabase persistence (2 RPCs per request) and the private Storage bucket. |
 | `supabase/migrations/` | Schema + RLS, server-side functions, demo template seed, storage bucket. |
 | `web/` | React + Vite + TypeScript UI (English/Spanish, WCAG 2.2 AA). |
+| `demo-data/test-invoices/` | Fictional sample invoice to upload (PNG + a generated phone photo), served at `/samples/`. |
 | `tests/` | Checks against `expected_results.json`; options, labels and the AI review with a stubbed provider. |
 | `docs/decision-review-eval.md` | Manual evaluation cases for the live AI review. |
 | `Dockerfile` | Stage 1 builds `web/` with Node; stage 2 runs it all on slim Python. |
@@ -223,7 +231,7 @@ product, reviewed the output, and tested the app; the AI wrote much of the code 
 5. **Email (magic link)**: Authentication → Sign In / Providers → Email → enabled. The built-in mailer is
    rate-limited, so for real use add your own SMTP (Authentication → Emails → SMTP settings).
 6. **Redirect URLs**: Authentication → URL Configuration → Site URL = your Render URL
-   (`https://YOUR-SERVICE.onrender.com`); add it (and `http://localhost:8000` for local tests) to Redirect URLs.
+   (`https://night-shift-r237.onrender.com`); add it (and `http://localhost:8000` for local tests) to Redirect URLs.
 7. **Storage bucket**: Storage → confirm a **private** bucket named `invoices` exists (migration 004 creates
    it; if not, New bucket → name `invoices`, Public off, 5 MB limit, allowed types image/png, image/jpeg,
    image/webp, application/pdf). Add **no** policies.
@@ -248,7 +256,7 @@ Health check path `/api/health`, start command blank (the Dockerfile reads `$POR
 
 | Secret | Value |
 |---|---|
-| `NIGHTSHIFT_URL` | your Render URL, e.g. `https://YOUR-SERVICE.onrender.com` (no trailing slash) |
+| `NIGHTSHIFT_URL` | your Render URL, e.g. `https://night-shift-r237.onrender.com` (no trailing slash) |
 | `CRON_SECRET` | the **same** value as on Render |
 
 Then Actions → "Nightly run" → **Run workflow** once to test it.

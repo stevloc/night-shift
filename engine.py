@@ -952,7 +952,7 @@ def update_settings(values):
         errors["target_margin_pct"] = "impossible"
     if errors:
         return {"error": "invalid", "fields": errors}
-    STATE["settings"] = {**clean, "monthly_orders": orders}
+    STATE["settings"] = {**STATE["settings"], **clean, "monthly_orders": orders}   # keeps owner_name
     _log("settings_changed", commission_pct=clean["commission_pct"], target_margin_pct=clean["target_margin_pct"])
     return {}
 
@@ -1118,7 +1118,7 @@ def view():
                          "lines": lines})
 
     return {
-        "owner": OWNER_NAME,
+        "owner": STATE["settings"].get("owner_name") or OWNER_NAME,   # restaurant settings, demo default
         "restaurant": RESTAURANT_NAME,
         "has_run": STATE["has_run"],
         "inbox": list(INBOX_FILES),

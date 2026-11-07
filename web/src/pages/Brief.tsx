@@ -3,7 +3,7 @@
 
 import { useState } from "react";
 import { api, type Dish } from "../api";
-import { useApp, useMediaQuery, type Route } from "../context";
+import { focusLater, useApp, useMediaQuery, type Route } from "../context";
 import { dishName, dishStatus, reasonText } from "../format";
 import { breakdownSources, targetSource } from "../sources";
 import { CostChangeLine, EarlierInvoices } from "../components/CostChange";
@@ -12,6 +12,12 @@ import { Num } from "../components/Num";
 import { HeldOptions } from "../components/OptionsReview";
 import { HeldNotes, RecommendationCard } from "../components/Recommendation";
 import { WhileYouSlept } from "../components/WhileYouSlept";
+
+const GUIDE_KEY = "ns_start_guide_hidden";
+
+function guideHiddenThisSession() {
+  try { return sessionStorage.getItem(GUIDE_KEY) === "1"; } catch { return false; }
+}
 
 export function Brief(_: { route: Route }) {
   const { view, i18n, runNightShift, running, requestReset } = useApp();
@@ -36,6 +42,25 @@ export function Brief(_: { route: Route }) {
   const ordered = [...decisionDishes].sort((a, b) => Math.abs(b.cost_change_monthly) - Math.abs(a.cost_change_monthly))
     .concat([...others].sort((a, b) => Number(b.held_by.length > 0) - Number(a.held_by.length > 0)));
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [guideHidden, setGuideHidden] = useState(guideHiddenThisSession);
+
+  function setGuide(hidden: boolean) {
+    setGuideHidden(hidden);
+    try { if (hidden) sessionStorage.setItem(GUIDE_KEY, "1"); else sessionStorage.removeItem(GUIDE_KEY); } catch { /* private mode */ }
+    focusLater(hidden ? "show-guide" : "guide-title");
+  }
+
+  /** Guide step 1: select Brisket Pho and move focus to its card (the right-hand panel on tablets). */
+  function openBrisket() {
+    setSelectedId("brisket-pho");
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const h = document.getElementById("rec-brisket-pho");
+      if (!h) return;
+      h.setAttribute("tabindex", "-1");
+      h.scrollIntoView({ block: "start", behavior: "smooth" });
+      h.focus({ preventScroll: true });
+    }));
+  }
   const selected = ordered.find((d) => d.id === selectedId) ?? ordered[0];
 
   const heroEl = (
@@ -53,7 +78,33 @@ export function Brief(_: { route: Route }) {
         )}
         {running && <p className="row" role="status"><span className="spinner" />{t("running")}</p>}
         {ran && <p className="hint row"><Icon name="info" size={16} />{t("num_hint")}</p>}
+        {guideHidden && (
+          <button id="show-guide" type="button" className="btn btn-ghost" onClick={() => setGuide(false)}>
+            <Icon name="list" />{t("guide_show")}
+          </button>
+        )}
       </section>
+      {!guideHidden && (
+        <section className="card stack start-guide" aria-labelledby="guide-title">
+          <div className="card-head">
+            <h2 id="guide-title" tabIndex={-1}>{t("guide_title")}</h2>
+            <button type="button" className="btn btn-ghost" onClick={() => setGuide(true)} aria-label={t("guide_hide_aria")}>
+              <Icon name="x" />{t("guide_hide")}
+            </button>
+          </div>
+          {!ran && <p className="hint">{t("guide_run_first")}</p>}
+          <ol className="guide-steps">
+            <li>
+              {ran && view.dishes.some((d) => d.id === "brisket-pho")
+                ? <button type="button" className="btn-link" onClick={openBrisket}>{t("guide_step1")}</button>
+                : <span>{t("guide_step1")}</span>}
+              <span className="hint">{t("guide_step1_hint")}</span>
+            </li>
+            <li><a href="#/invoices">{t("guide_step2")}</a><span className="hint">{t("guide_step2_hint")}</span></li>
+            <li><a href="#/invoices">{t("guide_step3")}</a><span className="hint">{t("guide_step3_hint")}</span></li>
+          </ol>
+        </section>
+      )}
     </>
   );
   const changedEl = (

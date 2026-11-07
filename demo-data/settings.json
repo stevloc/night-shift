@@ -1,7 +1,8 @@
 {
   "restaurant": {
     "name": "Pho Nightingale (fictional)",
-    "address": "100 Example St, Pittsburgh, PA"
+    "address": "100 Example St, Pittsburgh, PA",
+    "owner": "Steven"
   },
   "doordash_commission_pct": 25,
   "packaging_per_delivery_order": 0.5,

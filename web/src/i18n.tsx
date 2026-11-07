@@ -382,7 +382,7 @@ const en = {
   sd_history: "Order history: {orders} DoorDash orders in the {days} days {from} – {to} ({per_day} a day × {dpm} days = {forecast} a month).",
   sd_history_edited: "You set {orders} a month in Settings. Order history: {history} orders in the {days} days {from} – {to} (forecast {forecast} a month).",
   keep_current: "Keep current price",
-  keep_aria: "Keep the current DoorDash price for {dish}",
+  keep_aria: "Keep current price for {dish} on DoorDash",
   keep_title: "Keep the current price: {dish}",
   keep_body: "Keep {price} on DoorDash. This is saved to your decision log. You can bring the decision back later.",
   keep_note_label: "Reason (optional)",
@@ -558,6 +558,23 @@ const en = {
   rv_held_why: "Night Shift won't compare prices for {dish} until this is confirmed. Until then it uses the last verified cost. An investigation can help you check the line; it can't confirm it for you.",
 
   // ---- "Investigate this alert"
+  approx: "about {amount}",
+  guide_title: "Start here",
+  guide_hide: "Hide guide",
+  guide_hide_aria: "Hide guide: Start here (bring it back with Show guide)",
+  guide_show: "Show guide",
+  guide_run_first: "First, run Night Shift on tonight's inbox (the button above).",
+  guide_step1: "Open Brisket Pho to see what changed and why",
+  guide_step1_hint: "Every underlined number shows where it came from. Try “Review my options”.",
+  guide_step2: "Upload the sample invoice in Invoice Review",
+  guide_step2_hint: "Download the sample there, then upload it (or take a photo) to watch the AI read it.",
+  guide_step3: "Fix the held rice paper line",
+  guide_step3_hint: "“RICE PAPER 22CM 1 CS” has no pack size: confirm it and Spring Rolls are recalculated.",
+  inv_camera: "Take a photo",
+  inv_sample_title: "Try a sample invoice:",
+  inv_sample_hint: "a fictional supplier invoice that isn't in tonight's inbox. Download it, then upload it above.",
+  inv_sample_png: "Sample invoice (PNG)",
+  inv_sample_photo: "Same invoice as a phone photo (JPG, generated)",
   inv_button: "Investigate this alert",
   inv_again: "Investigate again",
   inv_hint: "One AI investigation: up to 6 read-only checks with Night Shift's own data and calculator. It can't change anything.",
@@ -971,7 +988,7 @@ const es: Record<Key, string> = {
   sd_history: "Historial de pedidos: {orders} pedidos de DoorDash en los {days} días del {from} al {to} ({per_day} al día × {dpm} días = {forecast} al mes).",
   sd_history_edited: "Pusiste {orders} al mes en Ajustes. Historial: {history} pedidos en los {days} días del {from} al {to} (pronóstico {forecast} al mes).",
   keep_current: "Mantener el precio actual",
-  keep_aria: "Mantener el precio actual de DoorDash para {dish}",
+  keep_aria: "Mantener el precio actual de {dish} en DoorDash",
   keep_title: "Mantener el precio actual: {dish}",
   keep_body: "Mantener {price} en DoorDash. Se guarda en tu registro de decisiones. Puedes recuperar la decisión después.",
   keep_note_label: "Motivo (opcional)",
@@ -1143,6 +1160,23 @@ const es: Record<Key, string> = {
   rv_held_line: "«{original}» en {no}: {reasons}",
   rv_held_why: "Night Shift no comparará precios para {dish} hasta que se confirme. Mientras tanto usa el último costo verificado. Una investigación puede ayudarte a revisar la línea; no puede confirmarla por ti.",
 
+  approx: "aprox. {amount}",
+  guide_title: "Empieza aquí",
+  guide_hide: "Ocultar guía",
+  guide_hide_aria: "Ocultar guía: Empieza aquí (vuelve con Mostrar guía)",
+  guide_show: "Mostrar guía",
+  guide_run_first: "Primero, ejecuta Night Shift con las facturas de esta noche (el botón de arriba).",
+  guide_step1: "Abre Pho de pecho de res para ver qué cambió y por qué",
+  guide_step1_hint: "Cada número subrayado muestra de dónde salió. Prueba «Revisar mis opciones».",
+  guide_step2: "Sube la factura de muestra en Revisión de facturas",
+  guide_step2_hint: "Descárgala ahí y súbela (o toma una foto) para ver cómo la lee la IA.",
+  guide_step3: "Corrige la línea de papel de arroz en espera",
+  guide_step3_hint: "«RICE PAPER 22CM 1 CS» no tiene tamaño de paquete: confírmalo y se recalculan los Rollos frescos.",
+  inv_camera: "Tomar una foto",
+  inv_sample_title: "Prueba una factura de muestra:",
+  inv_sample_hint: "una factura ficticia de un proveedor que no está en las facturas de esta noche. Descárgala y súbela arriba.",
+  inv_sample_png: "Factura de muestra (PNG)",
+  inv_sample_photo: "La misma factura como foto de teléfono (JPG, generada)",
   inv_button: "Investigar esta alerta",
   inv_again: "Investigar de nuevo",
   inv_hint: "Una investigación con IA: hasta 6 consultas de solo lectura con los datos y la calculadora de Night Shift. No puede cambiar nada.",
@@ -1227,8 +1261,8 @@ export function makeT(lang: Lang) {
   /** Per-unit costs: under $1 keep up to 4 decimals ($0.0735 per sheet). */
   const unitMoney = (n: number) => (Math.abs(n) < 1 ? unitFmt.format(n) : moneyFmt.format(n));
   const wholeFmt = new Intl.NumberFormat(locale, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
-  /** Rounded monthly figure for scenarios: "~$169" (the exact value is in the source popover). */
-  const approx = (n: number) => `~${n < 0 ? "−\u2060" : ""}${wholeFmt.format(Math.abs(n))}`;
+  /** Rounded monthly figure: "about $169" / "aprox. −$83" (the exact value is in the source popover). */
+  const approx = (n: number) => t("approx", { amount: `${n < -0.5 ? "−\u2060" : ""}${wholeFmt.format(Math.abs(n))}` });
   function num(n: number) { return numFmt.format(n); }
   /** pct(0.12) -> "12%";  pctPoints(29.3) -> "29.3%" */
   const pct = (fraction: number) => pctFmt.format(Math.abs(fraction));

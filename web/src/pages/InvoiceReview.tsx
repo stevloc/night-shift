@@ -17,7 +17,7 @@ export function InvoiceReview(_: { route: Route }) {
   const { t, money } = i18n;
   const [dragging, setDragging] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const inputId = useId(), messageId = useId();
+  const inputId = useId(), messageId = useId(), cameraId = useId();
 
   async function send(file: Blob, name: string) {
     setMessage(await uploadInvoice(file, name));
@@ -49,7 +49,23 @@ export function InvoiceReview(_: { route: Route }) {
             aria-describedby={message ? messageId : undefined}
             onChange={(e) => { const f = e.target.files?.[0]; if (f) send(f, f.name); e.target.value = ""; }} />
         </label>
+        {/* Phones and tablets open the rear camera; desktops fall back to choosing a file. */}
+        <div className="row">
+          <label htmlFor={cameraId} className="btn">
+            <Icon name="upload" />{t("inv_camera")}
+            <input id={cameraId} type="file" accept="image/*" capture="environment" className="sr-only"
+              aria-describedby={message ? messageId : undefined}
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) send(f, f.name || "photo.jpg"); e.target.value = ""; }} />
+          </label>
+        </div>
         {message && <p id={messageId} className="notice warn"><Icon name="alert" size={18} />{message}</p>}
+        <div className="sample-invoices">
+          <p><strong>{t("inv_sample_title")}</strong> {t("inv_sample_hint")}</p>
+          <ul className="row">
+            <li><a href="/samples/test_invoice_northbank_NB-7731.png" download><Icon name="download" size={16} />{t("inv_sample_png")}</a></li>
+            <li><a href="/samples/test_invoice_northbank_NB-7731_phone_photo.jpg" download><Icon name="download" size={16} />{t("inv_sample_photo")}</a></li>
+          </ul>
+        </div>
         <p className="hint">{t("inv_reupload_hint")}</p>
         <div className="row">
           {!view.has_run && (

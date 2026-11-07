@@ -494,6 +494,9 @@ async def reset(request: Request):
     return {"view": await run_in_threadpool(engine.view)}
 
 
+# Sample invoices to try "upload" with (fictional; public, no data of any user).
+app.mount("/samples", StaticFiles(directory=ROOT / "demo-data" / "test-invoices"), name="samples")
+
 # Serve the built React app (web/dist) at / when it exists. Registered last so /api wins.
 DIST = ROOT / "web" / "dist"
 if DIST.exists():

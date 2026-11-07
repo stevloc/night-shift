@@ -52,7 +52,7 @@ UNITS = {
 _settings = json.loads((DEMO / "settings.json").read_text())
 RESTAURANT_NAME = _settings["restaurant"]["name"]
 RESTAURANT_TZ = _settings["restaurant"].get("timezone", "America/New_York")   # Pittsburgh, PA
-OWNER_NAME = "Steven"
+OWNER_NAME = _settings["restaurant"].get("owner", "")   # demo default; each restaurant can override
 COMMISSION_CHOICES = (15, 25, 30)
 
 # Spanish names (the dataset is English-only).
@@ -111,6 +111,7 @@ DEFAULT_SETTINGS = {
     "commission_pct": int(_settings["doordash_commission_pct"]),
     "packaging": float(_settings["packaging_per_delivery_order"]),
     "target_margin_pct": float(_settings["target_delivery_margin_pct"]),
+    "owner_name": OWNER_NAME,
     # Forecast: average DoorDash orders per day over the last 28 days x 30.4 days.
     "monthly_orders": {k: round(n / FORECAST_WINDOW_DAYS * DAYS_PER_MONTH) for k, n in _forecast.items()},
 }
