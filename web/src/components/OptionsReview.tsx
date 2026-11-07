@@ -182,11 +182,12 @@ function SensitivityTable({ snap, option, options, onPick }: {
 function thresholdText(th: NonNullable<NonNullable<PriceOption["sensitivity"]>["threshold"]>, option: PriceOption, i18n: I18n) {
   const full = optionName(option.id, i18n);
   const name = full.charAt(0).toLowerCase() + full.slice(1);   // used mid-sentence
+  const price = i18n.money(option.price);
   if (th.decline !== null) {
     // Shown to one decimal: exact value stays on the server.
-    return i18n.t("rv_threshold", { option: name, pct: i18n.pctPoints(Math.round(th.decline * 1000) / 10) });
+    return i18n.t("rv_threshold", { option: name, price, pct: i18n.pctPoints(Math.round(th.decline * 1000) / 10) });
   }
-  return i18n.t(`rv_threshold_${th.reason}` as Key, { option: name });
+  return i18n.t(`rv_threshold_${th.reason}` as Key, { option: name, price });
 }
 
 /** Held dish: no price options and no AI review until the owner confirms the missing input. */

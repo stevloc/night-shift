@@ -223,6 +223,10 @@ product, reviewed the output, and tested the app; the AI wrote much of the code 
 ### 1. Supabase dashboard
 1. **Create a project** (supabase.com → New project). Save the database password somewhere safe.
 2. **Run the migrations**, in order: either `supabase link --project-ref <ref>` then `supabase db push`,
+- The AI figure check covers `$` amounts and percentages; a bare number in AI text (e.g. "16.49") is not
+  checked. Seen in the live smoke test: the investigator wrote "16.49" and "6.34", which did match the calculator.
+- Percentages display to one decimal, so a scenario just under the target can show "38%" next to
+  "Below your 38% target" (e.g. 37.98%). The status uses the exact value.
    or SQL Editor → paste and run each file in `supabase/migrations/` in filename order
    (`…001_schema`, `…002_functions`, `…003_seed_demo_template`, `…004_storage`).
 3. **Check the result**: Table Editor shows 11 tables, each marked "RLS enabled" with no policies;

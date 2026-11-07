@@ -84,7 +84,8 @@ function Outcome({ result, dish, stale }: { result: InvestigationResult; dish: D
       </div>
       <p className="hint">{t("inv_live", { model: result.model ?? "", checks: i18n.num(result.tool_executions ?? 0),
         seconds: i18n.num(result.elapsed_seconds ?? 0) })}
-        {result.readings?.includes("saved") && <> {t("inv_readings_saved")}</>}</p>
+        {result.readings?.length ? <> {t(result.readings.includes("ai")
+          ? (result.readings.includes("saved") ? "inv_readings_mixed" : "inv_readings_ai") : "inv_readings_saved")}</> : null}</p>
       {stale && <p className="notice warn"><Icon name="refresh" />{t("inv_stale")}</p>}
       <Activity events={result.events} dish={dish} />
       <p>{f.summary}</p>
