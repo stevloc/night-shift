@@ -8,13 +8,15 @@ import { focusLater, useApp } from "../context";
 import { costText, dishStatus, errorText, fieldError, fieldErrors, ingredientName, packText, reasonText } from "../format";
 import type { Key } from "../i18n";
 import {
-  breakdownSources, costChangeSource, invoiceSource, monthlySource, ordersSource, pctChangeSource,
+  breakdownSources, costChangeSource, invoiceSource, monthlySource, ordersSource,
   perOrderSource, targetSource,
 } from "../sources";
 import { Dialog } from "./Dialog";
 import { Icon } from "./Icon";
 import { AuthImage } from "./AuthImage";
+import { CostChangeLine, EarlierInvoices } from "./CostChange";
 import { Num } from "./Num";
+import { OptionsReview } from "./OptionsReview";
 
 const UNDO_SECONDS = 10;
 type Panel = "supplier" | null;
@@ -32,7 +34,8 @@ export function RecommendationCard({ dish }: { dish: Dish }) {
   const status = dishStatus(dish, i18n);
   const p = dish.proposal;
   const s = view.settings;
-  const change = view.changes.find((c) => c.dishes.includes(dish.id) && c.pct > 0);
+  // The biggest cost increase among this dish's ingredients (one current cost record per ingredient).
+  const change = view.changes.filter((c) => c.dishes.includes(dish.id) && c.pct > 0).sort((a, b) => b.pct - a.pct)[0];
   const now = breakdownSources(dish, dish.now, view, i18n);
   const before = breakdownSources(dish, dish.before, view, i18n);
 
@@ -94,17 +97,10 @@ export function RecommendationCard({ dish }: { dish: Dish }) {
       {change && (
         <p className="cause">
           <Icon name="up" size={18} />
-          <span>
-            {rich("change_line", {
-              ingredient: name(view.ingredients[change.ingredient].name),
-              old: <Num source={invoiceSource(change.prev_source, i18n)}>{money(change.prev.pack_price)}</Num>,
-              new: <Num source={invoiceSource(change.source, i18n)}>{money(change.now.pack_price)}</Num>,
-              pack: packText(change.now, i18n),
-            })}{" "}
-            <strong>({rich("change_up", { pct: <Num source={pctChangeSource(change.prev, change.now, i18n)}>{i18n.pct(change.pct)}</Num> })})</strong>
-          </span>
+          <span><CostChangeLine change={change} /></span>
         </p>
       )}
+      {change && <EarlierInvoices change={change} />}
 
       <section className="rec-block" aria-labelledby={`${headingId}-effect`}>
         <h4 id={`${headingId}-effect`}>{t("financial_effect")}</h4>
@@ -146,7 +142,7 @@ export function RecommendationCard({ dish }: { dish: Dish }) {
       ) : p && (
         <>
           <section id={`${headingId}-scenario`} className="rec-block proposal" aria-labelledby={`${headingId}-scenario-h`}>
-            <h4 id={`${headingId}-scenario-h`}>{t("scenario_title")}</h4>
+            <h4 id={`${headingId}-scenario-h`}>{t(p.edited ? "scenario_title_own" : "scenario_title")}</h4>
             <p className="proposal-line">{rich(p.edited ? "scenario_price_edited" : "scenario_price", {
               from: <Num source={now.price}>{money(dish.now.price)}</Num>,
               to: <Num source={breakdownSources(dish, p.after, view, i18n, p).price}>{money(p.price)}</Num> })}</p>
@@ -164,13 +160,15 @@ export function RecommendationCard({ dish }: { dish: Dish }) {
               orders: <Num source={ordersSource(dish, i18n)}>{i18n.num(dish.monthly_orders)}</Num> })}</p>
             <p className="hint row"><Icon name="info" size={16} />{t("demand_note")}</p>
             {p.edited && <p className="hint">{t("edited_note", { suggested: money(p.suggested) })}</p>}
-            {!p.reaches_target && <p className="notice warn"><Icon name="alert" />{t("still_below")}</p>}
+            {p.reaches_target
+              ? <p className="text-good row" style={{ gap: 8 }}><Icon name="checkCircle" />{t("scenario_reaches", { target: pctPoints(p.target_pct) })}</p>
+              : <p className="notice warn"><Icon name="alert" />{t("still_below_pct", { pct: pctPoints(p.after.margin_pct), target: pctPoints(p.target_pct) })}</p>}
           </section>
 
           <div className="choices" role="group" aria-label={t("proposed_action")}>
             <button id={`approve-${dish.id}`} type="button" className="btn btn-primary" onClick={() => act("approve")}
-              aria-label={t("approve_aria", { dish: dishLabel, price: money(p.price) })}>
-              <Icon name="check" />{t("approve_scenario")}
+              aria-label={t(p.edited ? "approve_own_aria" : "approve_aria", { dish: dishLabel, price: money(p.price) })}>
+              <Icon name="check" />{t(p.edited ? "approve_own" : "approve_scenario")}
             </button>
             <button type="button" className="btn" onClick={() => setEditing(true)} aria-label={t("edit_aria", { dish: dishLabel })}>
               <Icon name="edit" />{t("change_price")}
@@ -185,6 +183,8 @@ export function RecommendationCard({ dish }: { dish: Dish }) {
             </button>
           </div>
 
+          <OptionsReview dish={dish} />
+
           {change && (
             <button id={`act-supplier-${dish.id}`} type="button" className="btn btn-ghost" aria-expanded={panel === "supplier"}
               aria-controls={`${headingId}-supplier`} onClick={() => toggle("supplier")}>
@@ -196,18 +196,25 @@ export function RecommendationCard({ dish }: { dish: Dish }) {
             <h4 id={`${headingId}-supplier-h`}>{t("supplier_title")}</h4>
             {change?.has_image && (
               <AuthImage className="crop" src={api.lineImageUrl(change.invoice_id, change.line_id)}
-                alt={t("crop_alt", { no: change.source.invoice_no, original: change.original })} />
+                alt={t("crop_alt", { no: change.current_source.invoice_no, original: change.original })} />
             )}
             {change && (
               <ul className="proposal-facts">
-                <li><Icon name="clock" size={18} /><span>{rich("supplier_last", {
-                  no: change.prev_source.invoice_no, date: i18n.day(change.prev_source.date),
-                  price: <Num source={invoiceSource(change.prev_source, i18n)}>{money(change.prev.pack_price)}</Num>,
-                  pack: packText(change.prev, i18n) })}</span></li>
-                <li><Icon name="up" size={18} /><span>{rich("supplier_this", {
-                  no: change.source.invoice_no, date: i18n.day(change.source.date),
-                  price: <Num source={invoiceSource(change.source, i18n)}>{money(change.now.pack_price)}</Num>,
-                  pack: packText(change.now, i18n) })}</span></li>
+                <li><Icon name="clock" size={18} /><span>{rich("supplier_compare", {
+                  basis: t(`basis_${change.comparison_basis}`),
+                  no: change.comparison_source.invoice_no, date: i18n.day(change.comparison_source.date),
+                  price: <Num source={invoiceSource(change.comparison_source, i18n)}>{money(change.comparison.pack_price)}</Num>,
+                  pack: packText(change.comparison, i18n) })}</span></li>
+                {change.earlier.map((e) => (
+                  <li key={`${e.source.invoice_id}-${e.source.line_id}`}><Icon name="receipt" size={18} /><span>{rich("supplier_earlier", {
+                    no: e.source.invoice_no, date: i18n.day(e.source.date),
+                    price: <Num source={invoiceSource(e.source, i18n)}>{money(e.pack_price)}</Num>,
+                    pack: packText(e, i18n) })}</span></li>
+                ))}
+                <li><Icon name="up" size={18} /><span>{rich("supplier_current", {
+                  no: change.current_source.invoice_no, date: i18n.day(change.current_source.date),
+                  price: <Num source={invoiceSource(change.current_source, i18n)}>{money(change.current.pack_price)}</Num>,
+                  pack: packText(change.current, i18n) })}</span></li>
               </ul>
             )}
             <a href="#/invoices">{t("open_invoice")} <Icon name="chevron" size={16} /></a>
@@ -413,7 +420,8 @@ function EditPriceDialog({ dish, onClose }: { dish: Dish; onClose: () => void })
             {t("edit_preview", {
               left: money(preview.after.left), pct: pctPoints(preview.after.margin_pct),
               monthly: approx(preview.monthly_change),
-            })}
+            })}{" "}
+            {t(preview.reaches_target ? "edit_reaches" : "edit_below", { target: pctPoints(preview.target_pct) })}
           </p>
         )}
         <p className="hint row"><Icon name="info" size={16} />{t("demand_note")}</p>

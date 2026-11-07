@@ -37,6 +37,8 @@ export interface RecipeLine extends Pack {
   cost_before: number;
   pack_before: Pack;
   source: Source;
+  /** Where the "before" (comparison) price came from. */
+  source_before: Source;
   recipe_amount: number;
 }
 
@@ -48,6 +50,7 @@ export interface Proposal {
   per_order_change: number;
   monthly_change: number;
   reaches_target: boolean;
+  target_pct: number;
   keep_per_dollar: number;
 }
 
@@ -65,6 +68,11 @@ export interface Approval {
   monthly_change?: number;
   monthly_orders?: number;
   commission_pct?: number;
+  /** Price scenarios: the owner's own price (vs. suggested) and whether it reached the target. */
+  edited?: boolean;
+  reaches_target?: boolean;
+  margin_after?: number;
+  target_pct?: number;
   reason: string | null;
   note?: string;
   published: false;
@@ -80,6 +88,8 @@ export interface Dish {
   recipe_edited: boolean;
   before: Breakdown;
   now: Breakdown;
+  /** What "before" means: prices before tonight's run, or the saved prices if Night Shift hasn't run. */
+  comparison_basis: "before_run" | "saved_prices";
   in_store: { price: number; food_cost: number; left: number };
   status: DishStatus;
   held_by: string[];
@@ -96,14 +106,17 @@ export interface Dish {
   approval: Approval | null;
 }
 
+/** One per ingredient: the cost in use now vs. the explicit comparison. Earlier invoices are history only. */
 export interface Change {
   ingredient: string;
   pct: number;
   alert: boolean;
-  prev: Pack;
-  prev_source: Source;
-  now: Pack;
-  source: Source;
+  comparison: Pack;
+  comparison_source: Source;
+  comparison_basis: "before_run" | "saved_prices";
+  current: Pack;
+  current_source: Source;
+  earlier: (Pack & { source: Source })[];
   invoice_id: number;
   line_id: number;
   original: string;
@@ -193,6 +206,88 @@ export interface View {
   ingredients: Record<string, { name: Names; pack_unit: string; yield_pct: number; source: Source }>;
   units: string[];
 }
+
+// ---------------------------------------------------------------- "Review my options"
+
+export type OptionId = "keep_current" | "suggested" | "custom" | "limit";
+
+export interface Sensitivity {
+  available: boolean;
+  reason?: "no_order_volume";
+  orders?: number;
+  baseline_total?: number;
+  cases?: { decline: number; orders: number; scenario_total: number; change: number }[];
+  threshold?: { decline: number | null; reason: null | "option_not_positive" | "baseline_not_positive" | "no_change" | "option_lower" };
+}
+
+export interface PriceOption {
+  id: OptionId;
+  price: number;
+  after: Breakdown;
+  reaches_target: boolean;
+  loses_money: boolean;
+  per_order_change: number;
+  monthly_change: number | null;
+  within_limit: boolean | null;
+  sensitivity: Sensitivity | null;
+}
+
+export interface Evidence {
+  id: string;
+  provenance: "verified_invoice" | "owner_confirmed" | "previous_record" | "historical_invoice" | "needs_review"
+    | "owner_entered" | "owner_reported" | "setting" | "forecast" | "calculated";
+  text: string;
+  link: string;
+  ingredient?: string;
+  invoice_no?: string;
+}
+
+/** Code-computed facts and options for one dish (the AI review reads the same snapshot). */
+export interface Snapshot {
+  dish: string;
+  version: string;
+  dish_status: DishStatus | "held";
+  decision: Dish["decision"];
+  current_price: number;
+  now: Breakdown;
+  settings: { commission_pct: number; packaging: number; target_margin_pct: number };
+  monthly_orders: number;
+  monthly_available: boolean;
+  holds: {
+    held_by: string[];
+    review_lines: { ingredient: string; invoice_id: number; line_id: number; invoice_no: string; original: string; reasons: string[] }[];
+    open_corrections: { id: number; invoice_no: string; file: string }[];
+  };
+  options: PriceOption[];
+  conflicts: { kind: "limit_below_target_price"; limit: number; target_price: number; best_within_limit: OptionId;
+    best_margin: number; best_reaches_target: boolean }[];
+  allowed_actions: string[];
+  owner: { note: string; max_price: number | null; max_increase: number | null; limit: number | null };
+  evidence: Evidence[];
+}
+
+export interface DecisionReview {
+  recommended_option_id: OptionId | null;
+  summary: string;
+  considerations: { category: "cost" | "customer" | "data_quality"; text: string; evidence_ids: string[]; basis: "records" | "owner_reported" }[];
+  uncertainties: { text: string; evidence_ids: string[] }[];
+  follow_up_question: string | null;
+  next_action: string | null;
+}
+
+export interface ReviewResult {
+  snapshot: Snapshot;
+  status: "ok" | "held" | "no_options" | "stale" | "unavailable";
+  reason?: "ai_not_configured" | "rate_limited" | "timeout" | "provider_error" | "invalid_output";
+  retry_minutes?: number;
+  review?: DecisionReview;
+  provenance?: "live" | "cached";
+  generated_at?: string;
+  model?: string;
+  snapshot_version?: string;
+}
+
+export interface Limits { max_price: string; max_increase: string }
 
 /** A validation error from the server: codes the UI translates. */
 export class ApiError extends Error {
@@ -288,6 +383,17 @@ export const api = {
   keep: (dish: string, note: string) => request<WithView>(`/api/dishes/${dish}/keep`, send("POST", { note })),
   resolveCorrection: (id: number, choice: "keep_original" | "use_new") =>
     request<WithView>(`/api/corrections/${id}`, send("POST", { choice })),
+  /** Deterministic comparison: no AI. */
+  options: (dish: string, limits: Limits) => {
+    const q = new URLSearchParams();
+    if (limits.max_price.trim()) q.set("max_price", limits.max_price.trim());
+    if (limits.max_increase.trim()) q.set("max_increase", limits.max_increase.trim());
+    return request<{ snapshot: Snapshot }>(`/api/dishes/${dish}/options?${q}`);
+  },
+  /** One AI decision review. Read-only on the server. */
+  review: (dish: string, body: Limits & { note: string; snapshot_version: string; lang: Lang }) =>
+    request<ReviewResult>(`/api/dishes/${dish}/review`, send("POST", {
+      ...body, max_price: body.max_price.trim() || null, max_increase: body.max_increase.trim() || null })),
   restore: (dish: string) => request<WithView>(`/api/dishes/${dish}/restore`, send("POST")),
   saveSettings: (settings: Record<string, unknown>) => request<WithView>("/api/settings", send("PUT", settings)),
 };

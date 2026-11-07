@@ -153,7 +153,8 @@ function ProposedItem({ item }: { item: ReportItem }) {
     <Item title={<strong>{t("p_scenario_saved", { dish, from: money(item.from_price), to: money(item.to_price) })}</strong>}
       evidence={t("p_scenario_saved_ev", { time: i18n.time(item.approved_at) })} />
   ) : (
-    <Item title={<strong>{t("p_scenario_open", { dish, from: money(item.from_price), to: money(item.to_price) })}</strong>}
+    <Item title={<strong>{t(!item.edited ? "p_scenario_open" : item.reaches_target ? "p_scenario_own" : "p_scenario_own_below",
+      { dish, from: money(item.from_price), to: money(item.to_price), pct: i18n.pctPoints(item.margin ?? 0) })}</strong>}
       evidence={t("p_scenario_open_ev", { per: money(item.per_order_change, true), monthly: approx(item.monthly_change), orders: num(item.orders) })} />
   );
 }

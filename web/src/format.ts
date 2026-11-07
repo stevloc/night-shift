@@ -60,8 +60,13 @@ export function activityText(entry: Activity, view: View, i18n: I18n): string {
     case "recipe_changed":
       return t("ev_recipe_changed", { dish: dish(p.dish), ingredient: ing(p.ingredient).toLowerCase(),
         from: num(p.from), to: num(p.to), unit: i18n.unit(p.unit, p.to) });
-    case "edited": return t("ev_edited", { dish: dish(p.dish), price: money(p.price) });
-    case "approved": return t("ev_approved", { dish: dish(p.dish), price: money(p.to_price) });
+    case "edited":   // the owner's own price scenario: say whether it reaches the target (older entries: no flag)
+      return p.margin == null ? t("ev_edited", { dish: dish(p.dish), price: money(p.price) })
+        : t(p.reaches_target ? "ev_edited_reaches" : "ev_edited_below", { dish: dish(p.dish), price: money(p.price), pct: pctPoints(p.margin) });
+    case "approved":
+      return p.reaches_target === false
+        ? t("ev_approved_below", { dish: dish(p.dish), price: money(p.to_price), pct: pctPoints(p.margin) })
+        : t(p.edited ? "ev_approved_own" : "ev_approved", { dish: dish(p.dish), price: money(p.to_price) });
     case "dismissed":
       return p.reason ? t("ev_dismissed_reason", { dish: dish(p.dish), reason: reasonText(p.reason, p.note, i18n) })
         : t("ev_dismissed", { dish: dish(p.dish) });

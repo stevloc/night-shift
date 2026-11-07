@@ -8,6 +8,7 @@ import { dishStatus, errorText, fieldError, fieldErrors, ingredientName, packTex
 import { breakdownSources, costChangeSource, invoiceSource, monthlySource, ordersSource, perOrderSource, targetSource } from "../sources";
 import { Icon } from "../components/Icon";
 import { Num, type NumSource } from "../components/Num";
+import { HeldOptions } from "../components/OptionsReview";
 import { HeldNotes } from "../components/Recommendation";
 
 export function DishDetail({ route }: { route: Route }) {
@@ -67,9 +68,9 @@ export function DishDetail({ route }: { route: Route }) {
     { label: t("r_left"), key: "left", total: true },
   ];
   const columns = [
-    { label: t("c_before_change"), data: dish.before, src: breakdownSources(dish, dish.before, view, i18n) },
+    { label: t(`c_before_${dish.comparison_basis}`), data: dish.before, src: breakdownSources(dish, dish.before, view, i18n) },
     { label: t("c_now_col"), data: dish.now, src: breakdownSources(dish, dish.now, view, i18n) },
-    ...(p ? [{ label: t("c_proposed"), data: p.after, src: breakdownSources(dish, p.after, view, i18n, p) }] : []),
+    ...(p ? [{ label: t(p.edited ? "c_proposed_own" : "c_proposed"), data: p.after, src: breakdownSources(dish, p.after, view, i18n, p) }] : []),
   ];
 
   return (
@@ -92,6 +93,7 @@ export function DishDetail({ route }: { route: Route }) {
             {t("held_detail", { ingredients: i18n.list(dish.held_by.map((k) => ingredientName(view, k, i18n))) })}</p>
         )}
         <HeldNotes dish={dish} />
+        <HeldOptions dish={dish} />
         <p className="hint row"><Icon name="info" size={16} />{t("excluded")} {t("num_hint")}</p>
       </div>
 
@@ -121,7 +123,7 @@ export function DishDetail({ route }: { route: Route }) {
                 <th scope="col" className="num">{t("c_yield")}</th>
                 <th scope="col" className="num">{t("c_usable")}</th>
                 <th scope="col" className="num">{t("c_amount")}</th>
-                {costChanged && <th scope="col" className="num">{t("c_before")}</th>}
+                {costChanged && <th scope="col" className="num">{t(`c_before_${dish.comparison_basis}`)}</th>}
                 <th scope="col" className="num">{t("c_now")}</th>
               </tr>
             </thead>
@@ -155,7 +157,9 @@ export function DishDetail({ route }: { route: Route }) {
                         <Num source={recipeSrc}>{num(l.amount)} {i18n.unit(l.unit, l.amount)}</Num>
                       )}
                     </td>
-                    {costChanged && <td className="num">{money(l.cost_before)}</td>}
+                    {costChanged && <td className="num"><Num source={{ kind: invoiceSource(l.source_before, i18n).kind, detail:
+                      `${t(`basis_${dish.comparison_basis}`)}: ${money(l.pack_before.pack_price)} / ${packText(l.pack_before, i18n)}. ${invoiceSource(l.source_before, i18n).detail}` }}>
+                      {money(l.cost_before)}</Num></td>}
                     <td className={`num ${changed ? "text-bad" : ""}`}>
                       {changed && <Icon name="up" size={14} />}
                       <Num source={{ kind: "calc", detail: t("sd_serving", {
@@ -232,7 +236,8 @@ export function DishDetail({ route }: { route: Route }) {
           orders: <Num source={ordersSource(dish, i18n)}>{num(dish.monthly_orders)}</Num>,
           monthly: <Num source={monthlySource(dish.cost_change_per_order, dish, i18n)}>{money(dish.cost_change_monthly, true)}</Num>,
         }) : t("m_none")}</p>
-        {p && <p><strong>{i18n.rich("m_proposal", {
+        {p && <p><strong>{i18n.rich(p.edited ? (p.reaches_target ? "m_proposal_own" : "m_proposal_own_below") : "m_proposal", {
+          pct: pctPoints(p.after.margin_pct),
           per: <Num source={perOrderSource(dish, p, view, i18n)}>{money(p.per_order_change, true)}</Num>,
           orders: <Num source={ordersSource(dish, i18n)}>{num(dish.monthly_orders)}</Num>,
           monthly: <Num source={monthlySource(p.per_order_change, dish, i18n)}>{money(p.monthly_change, true)}</Num>,

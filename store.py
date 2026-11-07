@@ -62,6 +62,8 @@ def state_from_rows(snapshot):
     es = r.get("engine_state") or {}
     state.update(has_run=bool(es.get("has_run")), decisions=es.get("decisions", {}), findings=es.get("findings", {}),
                  restaurant_id=r["id"])
+    if es.get("baseline_sources"):   # where each "before" price came from (older rows: price history)
+        state["baseline_sources"].update(es["baseline_sources"])
 
     for row in snapshot["ingredients"]:
         key = row["ingredient_key"]
@@ -163,6 +165,7 @@ def rows_from_state(state, loaded_activity):
         "settings": state["settings"],
         "engine_state": {
             "has_run": state["has_run"], "decisions": state["decisions"], "findings": state["findings"],
+            "baseline_sources": state.get("baseline_sources", {}),
             "invoice_meta": {str(inv["id"]): {"extraction": inv.get("extraction"), "content_sig": inv.get("content_sig"),
                                               "superseded_by": inv.get("superseded_by"), "replaces": inv.get("replaces"),
                                               "fp": engine.fingerprint(inv["supplier"], inv["invoice_no"])
