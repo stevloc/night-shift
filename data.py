@@ -182,16 +182,38 @@ def match_ingredient(description):
     return None
 
 
+def to_recipe_unit(key, size, unit):
+    """A printed pack in the unit the recipe uses: 1 gal -> 128 fl oz; a count of rice paper -> sheets."""
+    if key and size and unit == "gal" and INGREDIENTS[key]["pack_unit"] == "fl_oz":
+        return size * 128, "fl_oz"
+    if key and unit == "each" and INGREDIENTS[key]["pack_unit"] == "sheet":
+        return size, "sheet"
+    return size, unit
+
+
+def complete_packs(lines):
+    """For AI readings: when the reader left the pack size out but the printed description states it
+    ("FISH SAUCE 1 GAL", "BAGUETTE 8IN 24 CT"), fill it with the same code parser the demo readings use.
+    "1 CS" says nothing about what's inside, so it stays unclear and the owner confirms it."""
+    for line in lines:
+        key = line.get("ingredient")
+        if not (line.get("pack_size") and line.get("pack_unit")):
+            size, unit = parse_pack(line.get("original") or "")
+            if not size:
+                continue
+            line["pack_size"], line["pack_unit"] = size, unit
+            line["unclear"] = [f for f in line.get("unclear", []) if f not in ("pack_size", "pack_unit")]
+            line["pack_from_code"] = True
+        line["pack_size"], line["pack_unit"] = to_recipe_unit(key, line["pack_size"], line["pack_unit"])
+    return lines
+
+
 def reading_to_invoice(inv):
     """Turn a ground-truth reading into the same shape the AI returns."""
     lines = []
     for line in inv["lines"]:
         key = match_ingredient(line["description"])
-        size, unit = parse_pack(line["description"])
-        if key and unit == "gal" and INGREDIENTS[key]["pack_unit"] == "fl_oz":
-            size, unit = size * 128, "fl_oz"   # 1 gal = 128 fl oz, the unit the recipe uses
-        if key and unit == "each" and INGREDIENTS[key]["pack_unit"] == "sheet":
-            unit = "sheet"
+        size, unit = to_recipe_unit(key, *parse_pack(line["description"]))
         lines.append({"original": line["description"], "quantity": float(line["qty"]), "ingredient": key,
                       "pack_size": size, "pack_unit": unit, "pack_price": float(line["unit_price"]),
                       "unclear": [], "printed_amount": float(line["amount"])})

@@ -45,7 +45,7 @@ def is_cached(file_bytes):
 
 
 def _cache_key(image_hash):
-    return f"invoice-v4:{MODEL}:{image_hash}"
+    return f"invoice-v5:{MODEL}:{image_hash}"   # v5: gal / fl_oz in the prompt
 
 
 def _client(timeout=60, max_retries=1):
@@ -118,7 +118,7 @@ def extract_invoice(image_bytes, mime_type="image/png", fallback=None):
         "- original: the line description exactly as printed\n"
         "- quantity: how many packs were ordered\n"
         "- ingredient: the matching key from the list below, or null if none fits\n"
-        "- pack_size and pack_unit: the size of ONE pack as printed (unit one of: lb, kg, oz, g, each, sheet). "
+        "- pack_size and pack_unit: the size of ONE pack as printed (unit one of: lb, kg, oz, g, gal, fl_oz, each, sheet). "
         "'50 ct' means 50 each. If the pack size is not printed (e.g. just '1 cs'), use null.\n"
         "- pack_price: the price for ONE pack (the unit price column)\n"
         "- unclear: list the field names you could not read with confidence\n"

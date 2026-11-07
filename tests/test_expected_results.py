@@ -161,6 +161,24 @@ def test_order_basis_explains_the_forecast():
     assert basis["days"] == 28 and basis["forecast"] == round(basis["orders"] / 28 * basis["days_per_month"])
 
 
+
+def test_ai_reading_without_pack_size_uses_the_code_parser(monkeypatch):
+    """Seen live on the sample invoice: the AI left "FISH SAUCE 1 GAL" without a pack size, which held
+    four dishes. The printed "1 GAL" is parsed by code (128 fl oz); "1 CS" would still be held."""
+    import dataclasses, llm
+    reading = {"supplier": "NORTHBANK FOODSERVICE", "invoice_no": "NB-7731", "date": "11/07/2026", "total": 42.0,
+               "lines": [{"original": "FISH SAUCE 1 GAL", "quantity": 3.0, "ingredient": "fish_sauce", "pack_size": None,
+                          "pack_unit": None, "pack_price": 14.0, "unclear": ["pack_size", "pack_unit"]}]}
+    monkeypatch.setattr(llm, "CONFIG", dataclasses.replace(llm.CONFIG, openrouter_api_key="test"))
+    monkeypatch.setattr(llm, "is_cached", lambda data: False)
+    monkeypatch.setattr(llm, "extract_invoice", lambda data, mime: (reading, False))
+    client, _ = run_demo()
+    v = client.post("/api/invoices", files={"file": ("nb.png", b"\x89PNG\r\n\x1a\nai-read", "image/png")}).json()["view"]
+    line = next(i for i in v["invoices"] if i["invoice_no"] == "NB-7731")["lines"][0]
+    assert line["status"] == "verified" and line["pack_size"] == 128 and line["pack_unit"] == "fl_oz"
+    assert not any(d["held_by"] for d in v["dishes"] if d["id"] != "spring-rolls-2")
+    assert reading["lines"][0]["pack_size"] is None      # the cached reading itself is not modified
+
 if __name__ == "__main__":
     import inspect
     for name, fn in list(globals().items()):

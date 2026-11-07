@@ -32,7 +32,7 @@ from zoneinfo import ZoneInfo
 from PIL import Image, ImageDraw
 
 import llm
-from data import (COMMISSION_CHOICES, DEFAULT_SETTINGS, DEMO_READINGS, DISHES, INBOX, INBOX_FILES, INGREDIENTS,
+from data import (COMMISSION_CHOICES, complete_packs, DEFAULT_SETTINGS, DEMO_READINGS, DISHES, INBOX, INBOX_FILES, INGREDIENTS,
                   ORDER_HISTORY, OWNER_NAME, PREVIOUS_INVOICES, RESTAURANT_NAME, RESTAURANT_TZ, UNITS,
                   reading_to_invoice)
 from margins import (BELOW_TARGET, COST_UP_OK, LOSES, breakdown, cents, food_cost, ingredient_lines,
@@ -289,6 +289,7 @@ def process_invoice(image_bytes, mime_type, filename, at=None, client_ip=None):
         from_demo, extraction = False, "saved" if cached else "ai"
         if not read:
             return {"error": "could_not_read"}
+        read = {**read, "lines": complete_packs([dict(l) for l in read["lines"]])}
 
     fp = fingerprint(read["supplier"], read["invoice_no"])
     sig = content_signature(read["total"], read["lines"])
@@ -425,12 +426,15 @@ def _log_effects(before, at, cause):
                  status_from=old_state, status_to=new_state)
 
 
-def run_night_shift(seeded_clock=True):
+def run_night_shift(seeded_clock=True, run_key=None):
     """One night: read every file in demo-data/inbox/ (already-counted invoices are skipped as
     duplicates), recalculate, and log it all under one run id.
 
     seeded_clock=True (the demo button) stamps the log 11:38 PM...6:55 AM so every demo reads the same;
     the scheduled nightly run uses real time.
+    run_key (scheduled runs only) is recorded on the shift_start / brief_ready entries together with the
+    run's counts, so a retried or repeated scheduled run can tell this night was already done
+    (see completed_run) and report the original outcome instead of running again.
     """
     STATE["run_id"] = str(uuid.uuid4())
     STATE["night_minutes"] = 0
@@ -438,15 +442,47 @@ def run_night_shift(seeded_clock=True):
     STATE["baseline_sources"] = copy.deepcopy(STATE["sources"])
     STATE["has_run"] = True
     clock = "night" if seeded_clock else None
-    _log("shift_start", at=_night_time(0) if seeded_clock else None, files=len(INBOX_FILES))
+    keyed = {"run_key": run_key} if run_key else {}
+    _log("shift_start", at=_night_time(0) if seeded_clock else None, files=len(INBOX_FILES), **keyed)
     results = []
-    for filename in INBOX_FILES:   # the three invoices, then the forwarded copy
-        path = INBOX / filename
-        if path.exists():
-            results.append({"file": filename, **process_invoice(path.read_bytes(), "image/png", filename, at=clock)})
-    _log("brief_ready", at=datetime(2026, 11, 7, 6, 55, tzinfo=TZ).isoformat() if seeded_clock else None)
-    STATE["run_id"] = None
+    try:
+        for filename in INBOX_FILES:   # the three invoices, then the forwarded copy
+            path = INBOX / filename
+            if path.exists():
+                results.append({"file": filename, **process_invoice(path.read_bytes(), "image/png", filename, at=clock)})
+        summary = {"summary": summarize_run(results)} if run_key else {}
+        _log("brief_ready", at=datetime(2026, 11, 7, 6, 55, tzinfo=TZ).isoformat() if seeded_clock else None,
+             **keyed, **summary)
+    finally:
+        STATE["run_id"] = None
     return results
+
+
+def summarize_run(results):
+    """Counts only (no supplier names, invoice numbers, amounts or lines): safe to log anywhere."""
+    errors = {}
+    for r in results:
+        if r.get("error"):
+            errors[r["error"]] = errors.get(r["error"], 0) + 1
+    return {
+        "files": len(results),
+        "invoices_processed": sum(1 for r in results if "invoice_id" in r),
+        "duplicates_skipped": sum(1 for r in results if "duplicate_of" in r),
+        "possible_corrections": sum(1 for r in results if "possible_correction" in r),
+        "review_holds": sum(r.get("review", 0) for r in results if "invoice_id" in r),
+        "errors": sum(errors.values()),
+        "error_codes": errors,
+    }
+
+
+def completed_run(run_key):
+    """The summary of an earlier completed run with this key, or None. A run's entries are only saved
+    together with everything else it did (one transaction), so a logged brief_ready means it finished."""
+    for entry in reversed(STATE["activity"]):
+        params = entry.get("params") or {}
+        if entry["kind"] == "brief_ready" and params.get("run_key") == run_key:
+            return params.get("summary") or {}
+    return None
 
 
 def upload_invoice(image_bytes, mime_type, filename, client_ip=None):
