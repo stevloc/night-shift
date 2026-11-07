@@ -38,12 +38,24 @@ export function breakdownSources(dish: Dish, b: Breakdown, view: View, i18n: I18
 
 export const targetSource = (i18n: I18n): NumSource => ({ kind: "setting", detail: i18n.t("sd_target") });
 
+/** The order history behind the forecast (or a note that the owner set the number in Settings). */
+export function historyText(dish: Dish, i18n: I18n): string {
+  const b = dish.order_basis;
+  if (!b) return "";
+  const common = { days: i18n.num(b.days), from: i18n.day(b.from), to: i18n.day(b.to), forecast: i18n.num(b.forecast) };
+  return b.edited
+    ? i18n.t("sd_history_edited", { ...common, orders: i18n.num(dish.monthly_orders), history: i18n.num(b.orders) })
+    : i18n.t("sd_history", { ...common, orders: i18n.num(b.orders), per_day: i18n.num(Math.round(b.orders / b.days * 10) / 10),
+        dpm: i18n.num(b.days_per_month) });
+}
+
 export function ordersSource(dish: Dish, i18n: I18n): NumSource {
-  return { kind: "forecast", detail: i18n.t("sd_orders", { orders: i18n.num(dish.monthly_orders), dish: i18n.name(dish.name) }) };
+  return { kind: "forecast", detail: `${i18n.t("sd_orders", { orders: i18n.num(dish.monthly_orders), dish: i18n.name(dish.name) })} ${historyText(dish, i18n)}`.trim() };
 }
 
 export function monthlySource(perOrder: number, dish: Dish, i18n: I18n): NumSource {
-  return { kind: "forecast", detail: i18n.t("sd_monthly", { per: i18n.money(perOrder, true), orders: i18n.num(dish.monthly_orders) }) };
+  return { kind: "forecast", detail: [i18n.t("sd_monthly", { per: i18n.money(perOrder, true), orders: i18n.num(dish.monthly_orders) }),
+    historyText(dish, i18n), i18n.t("demand_note")].filter(Boolean).join(" ") };
 }
 
 export function costChangeSource(dish: Dish, i18n: I18n): NumSource {

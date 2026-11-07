@@ -160,6 +160,14 @@ class Dismissal(BaseModel):
     note: str = ""
 
 
+class KeepPrice(BaseModel):
+    note: str = ""
+
+
+class CorrectionChoice(BaseModel):
+    choice: str = ""
+
+
 # ------------------------------------------------------------------ routes
 
 @app.get("/api/health")
@@ -304,6 +312,18 @@ def undo(dish_id: str):
 @app.post("/api/dishes/{dish_id}/dismiss")
 def dismiss(dish_id: str, body: Dismissal):
     return _respond(engine.dismiss(_dish(dish_id), body.reason, body.note))
+
+
+@app.post("/api/dishes/{dish_id}/keep")
+def keep_price(dish_id: str, body: KeepPrice):
+    """Keep the current DoorDash price on purpose (saved to the decision log, reason optional)."""
+    return _respond(engine.keep_price(_dish(dish_id), body.note))
+
+
+@app.post("/api/corrections/{correction_id}")
+def resolve_correction(correction_id: int, body: CorrectionChoice):
+    """Possible corrected invoice: the owner picks which version counts (keep_original | use_new)."""
+    return _respond(engine.resolve_correction(correction_id, body.choice))
 
 
 @app.post("/api/dishes/{dish_id}/restore")

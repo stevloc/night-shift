@@ -3,7 +3,7 @@
 // until the owner confirms. Skipped duplicates are listed with their evidence.
 
 import { useId, useState } from "react";
-import { api, type Invoice, type InvoiceLine } from "../api";
+import { api, type Invoice, type InvoiceLine, type PossibleCorrection } from "../api";
 import { focusLater, useApp, type Route } from "../context";
 import { errorText, fieldError, fieldErrors, ingredientName } from "../format";
 import type { Key } from "../i18n";
@@ -61,6 +61,8 @@ export function InvoiceReview(_: { route: Route }) {
         </div>
       </section>
 
+      {view.possible_corrections.map((pc) => <PossibleCorrectionCard key={pc.id} pc={pc} />)}
+
       {view.invoices.length === 0 ? (
         <div className="card empty"><span className="icon-big"><Icon name="receipt" size={40} /></span><p>{t("inv_empty")}</p></div>
       ) : [...view.invoices].reverse().map((inv) => <InvoiceCard key={inv.id} invoice={inv} />)}
@@ -89,7 +91,10 @@ export function InvoiceReview(_: { route: Route }) {
 function InvoiceCard({ invoice }: { invoice: Invoice }) {
   const { i18n } = useApp();
   const { t, num, rich, money } = i18n;
-  const review = invoice.lines.filter((l) => l.status === "needs_review").length;
+  const { view } = useApp();
+  const counted = invoice.superseded_by === null;
+  const review = counted ? invoice.lines.filter((l) => l.status === "needs_review").length : 0;
+  const fileOf = (id: number | null) => view.invoices.find((i) => i.id === id)?.file ?? "";
   const headingId = `inv-${invoice.id}`;
   const sumSource: NumSource = { kind: "calc", detail: t("v_totals_ev", {
     lines: num(invoice.lines.length), sum: money(invoice.lines_sum), total: invoice.total == null ? "—" : money(invoice.total) }) };
@@ -101,11 +106,16 @@ function InvoiceCard({ invoice }: { invoice: Invoice }) {
           <h2 id={headingId}>{invoice.supplier || t("inv_uploaded")}</h2>
           {invoice.invoice_no && <p className="hint">{t("inv_meta", { no: invoice.invoice_no, date: i18n.day(invoice.date) })} · {invoice.file}</p>}
         </div>
-        <span className={`pill ${review ? "warn" : "good"}`}>
-          <Icon name={review ? "eye" : "checkCircle"} size={16} />
-          {t("inv_counts", { verified: num(invoice.lines.length - review), review: num(review) })}
-        </span>
+        {counted && (
+          <span className={`pill ${review ? "warn" : "good"}`}>
+            <Icon name={review ? "eye" : "checkCircle"} size={16} />
+            {t("inv_counts", { verified: num(invoice.lines.length - review), review: num(review) })}
+          </span>
+        )}
       </div>
+      <Provenance extraction={invoice.extraction} at={invoice.read_at} />
+      {!counted && <p className="notice"><Icon name="minus" />{t("inv_superseded", { file: fileOf(invoice.superseded_by) })}</p>}
+      {invoice.replaces !== null && <p className="notice"><Icon name="info" />{t("inv_replaces", { file: fileOf(invoice.replaces) })}</p>}
       <p className={invoice.totals_match ? "row text-good" : "notice warn"} style={{ gap: 8 }}>
         <Icon name={invoice.totals_match ? "checkCircle" : "alert"} size={18} />
         <span>{rich(invoice.totals_match ? "totals_ok" : "totals_bad", {
@@ -113,21 +123,20 @@ function InvoiceCard({ invoice }: { invoice: Invoice }) {
           total: invoice.total == null ? "—" : <Num source={totalSource}>{money(invoice.total)}</Num>,
         })}</span>
       </p>
-      {invoice.used_fallback && <p className="notice"><Icon name="info" />{t("inv_fallback")}</p>}
       <ol className="line-list" aria-label={t("inv_lines")}>
         {/* Lines needing review first: that's where the owner's attention goes. */}
         {[...invoice.lines].sort((a, b) => Number(b.status === "needs_review") - Number(a.status === "needs_review"))
-          .map((line) => <LineCard key={line.id} invoice={invoice} line={line} />)}
+          .map((line) => <LineCard key={line.id} invoice={invoice} line={line} counted={counted} />)}
       </ol>
     </section>
   );
 }
 
-function LineCard({ invoice, line }: { invoice: Invoice; line: InvoiceLine }) {
+function LineCard({ invoice, line, counted }: { invoice: Invoice; line: InvoiceLine; counted: boolean }) {
   const { view, i18n } = useApp();
   const { t, money, num, name } = i18n;
   const [editing, setEditing] = useState(false);
-  const needsReview = line.status === "needs_review";
+  const needsReview = counted && line.status === "needs_review";
   const held = line.ingredient ? view.dishes.filter((d) => d.held_by.includes(line.ingredient!)).map((d) => name(d.name)) : [];
   const n = line.normalized;
   const fromInvoice: NumSource = { kind: line.corrected ? "owner" : "invoice",
@@ -184,14 +193,81 @@ function LineCard({ invoice, line }: { invoice: Invoice; line: InvoiceLine }) {
           </div>
         </div>
       )}
-      <div className="row">
-        <button type="button" className={needsReview ? "btn btn-primary" : "btn"} onClick={() => setEditing(true)}
-          aria-label={t(needsReview ? "fix_aria" : "check_aria", { original: line.original })}>
-          <Icon name="edit" />{needsReview ? t("fix_line") : t("check_line")}
-        </button>
-      </div>
+      {counted && (
+        <div className="row">
+          <button type="button" className={needsReview ? "btn btn-primary" : "btn"} onClick={() => setEditing(true)}
+            aria-label={t(needsReview ? "fix_aria" : "check_aria", { original: line.original })}>
+            <Icon name="edit" />{needsReview ? t("fix_line") : t("check_line")}
+          </button>
+        </div>
+      )}
       {editing && <CorrectLineDialog invoice={invoice} line={line} onClose={() => setEditing(false)} />}
     </li>
+  );
+}
+
+/** Where the reading came from: the model just now, or a stored reading (no AI call). Never blurred together. */
+export function Provenance({ extraction, at }: { extraction: "ai" | "saved"; at: string }) {
+  const { i18n } = useApp();
+  const { t } = i18n;
+  if (extraction === "saved") {
+    return <p className="row hint" style={{ gap: 8 }}><span className="pill neutral prov"><Icon name="refresh" size={16} />{t("prov_saved")}</span>
+      {t("prov_saved_hint")}</p>;
+  }
+  const recent = Date.now() - new Date(at).getTime() < 10 * 60 * 1000;
+  return <p className="row"><span className="pill neutral prov"><Icon name="eye" size={16} />
+    {recent ? t("prov_ai") : t("prov_ai_at", { time: `${i18n.day(at.slice(0, 10))} ${i18n.time(at)}` })}</span></p>;
+}
+
+/** Same supplier + invoice number as a counted invoice, different contents: the owner picks which version counts. */
+function PossibleCorrectionCard({ pc }: { pc: PossibleCorrection }) {
+  const { setView, i18n, announce } = useApp();
+  const { t, money, num } = i18n;
+  const [busy, setBusy] = useState(false);
+  const headingId = `pc-${pc.id}`;
+  const lineText = (l: PossibleCorrection["only_new"][number]) => t("pc_line", {
+    original: l.original, qty: l.quantity == null ? "—" : num(l.quantity), price: l.pack_price == null ? "—" : money(l.pack_price) });
+
+  async function choose(choice: "keep_original" | "use_new") {
+    setBusy(true);
+    try {
+      setView((await api.resolveCorrection(pc.id, choice)).view);
+      announce(t(choice === "use_new" ? "pc_used_announce" : "pc_kept_announce", { no: pc.invoice_no }));
+    } catch (e) {
+      announce(errorText(e, i18n));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section id={`correction-${pc.id}`} className="card stack" aria-labelledby={headingId} tabIndex={-1}>
+      <div className="card-head">
+        <div>
+          <h2 id={headingId}>{t("pc_title")}: {pc.supplier} {pc.invoice_no}</h2>
+          <p className="hint">{t("n_possible_correction_ev", { file: pc.file, of_file: pc.of_file,
+            total: pc.total == null ? "—" : money(pc.total), of_total: pc.of_total == null ? "—" : money(pc.of_total) })}</p>
+        </div>
+        <span className="pill warn"><Icon name="eye" size={16} />{t("status_review")}</span>
+      </div>
+      <Provenance extraction={pc.extraction} at={pc.read_at} />
+      <ul className="proposal-facts">
+        <li><Icon name="checkCircle" size={18} /><span>{t("pc_counted", { file: pc.of_file,
+          total: pc.of_total == null ? "—" : money(pc.of_total), lines: num(pc.of_lines) })}</span></li>
+        <li><Icon name="receipt" size={18} /><span>{t("pc_new", { file: pc.file,
+          total: pc.total == null ? "—" : money(pc.total), lines: num(pc.lines) })}</span></li>
+      </ul>
+      {pc.only_counted.length > 0 && <div><h3 className="hint">{t("pc_only_counted")}</h3>
+        <ul className="pc-diff">{pc.only_counted.map((l, i) => <li key={i}>{lineText(l)}</li>)}</ul></div>}
+      {pc.only_new.length > 0 && <div><h3 className="hint">{t("pc_only_new")}</h3>
+        <ul className="pc-diff">{pc.only_new.map((l, i) => <li key={i}>{lineText(l)}</li>)}</ul></div>}
+      <div className="row">
+        <button type="button" className="btn" disabled={busy} onClick={() => choose("keep_original")}>
+          <Icon name="check" />{t("pc_keep")}</button>
+        <button type="button" className="btn btn-primary" disabled={busy} onClick={() => choose("use_new")}>
+          <Icon name="refresh" />{t("pc_use_new")}</button>
+      </div>
+    </section>
   );
 }
 

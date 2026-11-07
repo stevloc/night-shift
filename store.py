@@ -24,7 +24,8 @@ BUCKET = "invoices"
 GROUP = {
     "shift_start": "verified", "invoice_read": "verified", "recalculated": "verified", "duplicate_skipped": "verified",
     "owner_confirmed": "verified", "hold_cleared": "verified", "price_change": "verified", "brief_ready": "verified",
-    "held": "needs_input",
+    "correction_resolved": "verified", "correction_effect": "verified",
+    "held": "needs_input", "possible_correction": "needs_input",
     "below_target": "proposed", "loses_money": "proposed", "approved": "proposed",
 }
 
@@ -39,8 +40,12 @@ def _message(entry):
         "price_change": f"{p.get('ingredient')}: {p.get('old')} -> {p.get('new')} per pack ({p.get('invoice_no')}).",
         "owner_confirmed": f"Owner confirmed {p.get('ingredient')} case = {p.get('pack_size'):g} {p.get('pack_unit')}."
         if isinstance(p.get("pack_size"), (int, float)) else f"Owner confirmed {p.get('ingredient')}.",
-        "approved": f"Approved {p.get('dish')} at {p.get('to_price')}. Saved, not published.",
+        "approved": f"Approved {p.get('dish')} at {p.get('to_price')}. Decision saved; not published to DoorDash.",
         "dismissed": f"Dismissed {p.get('dish')}: {p.get('reason')}.",
+        "kept_price": f"Kept the current price for {p.get('dish')} ({p.get('price')}). {p.get('note') or ''}".strip(),
+        "possible_correction": f"Possible corrected invoice {p.get('invoice_no')} ({p.get('file')}): held, not counted.",
+        "correction_resolved": f"Invoice {p.get('invoice_no')}: owner chose {p.get('kept_file')}.",
+        "correction_effect": f"{p.get('dish')}: {p.get('left_from')} -> {p.get('left_to')} left per order after correction.",
     }.get(k, f"{k.replace('_', ' ')}{(': ' + p['dish']) if 'dish' in p else ''}")
 
 
@@ -94,6 +99,19 @@ def state_from_rows(snapshot):
         if row["storage_path"]:
             state["images"][lid] = ("storage", row["storage_path"])
 
+    # Per-invoice extras kept in engine_state (no extra columns): provenance, contents, corrections.
+    meta = es.get("invoice_meta", {})
+    for inv in state["invoices"]:
+        m = meta.get(str(inv["id"]), {})
+        inv["extraction"] = m.get("extraction") or ("saved" if inv["used_fallback"] else "ai")
+        inv["content_sig"] = m.get("content_sig") or engine.content_signature(inv["total"], inv["lines"])
+        inv["superseded_by"], inv["replaces"] = m.get("superseded_by"), m.get("replaces")
+        if m.get("fp") and inv["superseded_by"] is None:
+            state["fingerprints"][m["fp"]] = inv["id"]   # a replacement counts for its supplier + number
+    state["possible_corrections"] = es.get("possible_corrections", [])
+    for pc in state["possible_corrections"]:
+        pc["image"] = tuple(pc["image"])
+
     state["decision_log"] = [row["details"] for row in snapshot["decisions"]]
     state["activity"] = [{"id": row["local_id"], "at": row["at"], "kind": row["evidence"].get("kind"),
                           "params": row["evidence"].get("params", {}), "run_id": row["run_id"]}
@@ -143,7 +161,16 @@ def rows_from_state(state, loaded_activity):
                           "prev": l.get("prev"), "prev_source": l.get("prev_source")})
     return {
         "settings": state["settings"],
-        "engine_state": {"has_run": state["has_run"], "decisions": state["decisions"], "findings": state["findings"]},
+        "engine_state": {
+            "has_run": state["has_run"], "decisions": state["decisions"], "findings": state["findings"],
+            "invoice_meta": {str(inv["id"]): {"extraction": inv.get("extraction"), "content_sig": inv.get("content_sig"),
+                                              "superseded_by": inv.get("superseded_by"), "replaces": inv.get("replaces"),
+                                              "fp": engine.fingerprint(inv["supplier"], inv["invoice_no"])
+                                              if inv["invoice_no"] else None}
+                             for inv in state["invoices"]},
+            # Files are in Storage in production; in-memory bytes (local mode only) are never saved.
+            "possible_corrections": [pc for pc in state["possible_corrections"] if pc["image"][0] != "bytes"],
+        },
         "ingredients": ingredients,
         "recipes": [{"item_key": d, "ingredient_key": k, "qty": v[0], "unit": v[1]}
                     for d, rec in state["recipes"].items() for k, v in rec.items()],

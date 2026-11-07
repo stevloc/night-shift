@@ -123,6 +123,11 @@ export function App() {
         announce(text);
         return text;
       }
+      if (r.possible_correction) {
+        const text = t("pc_uploaded", { no: r.possible_correction });
+        announce(text);
+        return text;
+      }
       const inv = r.view.invoices.find((i) => i.id === r.invoice_id);
       const verified = inv ? inv.lines.filter((l) => l.status === "verified").length : 0;
       announce(t("inv_added", { verified: i18n.num(verified), review: i18n.num(r.review ?? 0) }));

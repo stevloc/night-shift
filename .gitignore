@@ -5,3 +5,4 @@ __pycache__/
 llm_cache.json
 *.zip
 .DS_Store
+supabase/.temp/

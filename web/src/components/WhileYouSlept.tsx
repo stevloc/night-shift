@@ -7,7 +7,7 @@
 import type { ReactNode } from "react";
 import type { ReportItem } from "../api";
 import { useApp } from "../context";
-import { activityText, dishName, ingredientName } from "../format";
+import { activityText, dishName, ingredientName, statusWords } from "../format";
 import type { Key } from "../i18n";
 import { Icon, type IconName } from "./Icon";
 
@@ -103,6 +103,13 @@ function VerifiedItem({ item }: { item: ReportItem }) {
     case "recalculated":
       return <Item at={item.at} title={t("v_recalculated", { dishes: num(item.dishes) })}
         evidence={t("v_recalculated_ev", { invoice: num(item.invoice_prices), saved: num(item.saved_prices) })} />;
+    case "correction_resolved":
+      return <Item at={item.at} title={<strong>{t("v_correction_resolved", { no: item.invoice_no })}</strong>}
+        evidence={t("v_correction_resolved_ev", { kept: item.kept_file, other: item.other_file })} />;
+    case "correction_effect":
+      return <Item at={item.at} title={<strong>{t("v_correction_effect", { dish: dishName(view, item.dish, i18n), cause: item.cause })}</strong>}
+        evidence={t("v_correction_effect_ev", { food_from: money(item.food_from), food_to: money(item.food_to),
+          left_from: money(item.left_from), left_to: money(item.left_to), status: statusWords(item.status_to, i18n) })} />;
     case "cost_up_ok":
       return <Item at={item.at} title={t("v_cost_up_ok", { dish: dishName(view, item.dish, i18n) })}
         evidence={t("v_cost_up_ok_ev", { margin: pctPoints(item.margin), target: pctPoints(item.target), change: money(item.cost_change, true) })}>
@@ -116,6 +123,15 @@ function VerifiedItem({ item }: { item: ReportItem }) {
 function NeedsItem({ item }: { item: ReportItem }) {
   const { view, i18n } = useApp();
   const { t, money, num, list } = i18n;
+  if (item.kind === "possible_correction") {
+    return (
+      <Item at={item.at} title={<strong>{t("n_possible_correction", { no: item.invoice_no })}</strong>}
+        evidence={t("n_possible_correction_ev", { file: item.file, of_file: item.of_file,
+          total: item.total == null ? "—" : money(item.total), of_total: item.of_total == null ? "—" : money(item.of_total) })}>
+        <a href="#/invoices">{t("pc_choose")} <Icon name="chevron" size={16} /></a>
+      </Item>
+    );
+  }
   if (item.kind === "totals_mismatch") {
     return <Item at={item.at} title={t("n_totals_mismatch", { no: item.invoice_no })}
       evidence={t("v_totals_ev", { lines: num(item.lines), sum: money(item.lines_sum), total: item.total == null ? "—" : money(item.total) })} />;

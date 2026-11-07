@@ -474,6 +474,9 @@ h1[tabindex="-1"]:focus, h2[tabindex="-1"]:focus, main:focus { outline: none; }
 .dish-list li { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: space-between;
   padding-bottom: 12px; border-bottom: 1px solid var(--border); }
 .dish-list li:last-child { border-bottom: 0; padding-bottom: 0; }
+.dish-list .held-row { flex-basis: 100%; }
+.pill.prov { font-weight: 600; }
+.pc-diff { display: grid; gap: 4px; margin: 0; padding-left: 1.2rem; }
 .dish-list a { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; font-weight: 700; color: var(--text); }
 
 details.activity summary { min-height: 48px; display: flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 700;

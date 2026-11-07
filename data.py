@@ -114,6 +114,11 @@ DEFAULT_SETTINGS = {
     # Forecast: average DoorDash orders per day over the last 28 days x 30.4 days.
     "monthly_orders": {k: round(n / FORECAST_WINDOW_DAYS * DAYS_PER_MONTH) for k, n in _forecast.items()},
 }
+# The order history behind each forecast (shown in the "monthly change" tooltip).
+ORDER_HISTORY = {k: {"orders": n, "days": FORECAST_WINDOW_DAYS, "from": _window_start.isoformat(),
+                     "to": _last_day.isoformat(), "days_per_month": DAYS_PER_MONTH,
+                     "forecast": DEFAULT_SETTINGS["monthly_orders"][k]}
+                 for k, n in _forecast.items()}
 
 # ---------------------------------------------------------------- where today's prices came from
 _last_delivery = max(r["date"] for r in _rows("price_history.csv"))

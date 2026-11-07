@@ -7,7 +7,7 @@ import { dishName, dishStatus, packText, reasonText } from "../format";
 import { invoiceSource, pctChangeSource, breakdownSources, targetSource } from "../sources";
 import { Icon } from "../components/Icon";
 import { Num } from "../components/Num";
-import { RecommendationCard } from "../components/Recommendation";
+import { HeldNotes, RecommendationCard } from "../components/Recommendation";
 import { WhileYouSlept } from "../components/WhileYouSlept";
 
 export function Brief(_: { route: Route }) {
@@ -100,6 +100,7 @@ export function Brief(_: { route: Route }) {
                       <Num source={targetSource(i18n)}>{pctPoints(view.settings.target_margin_pct)}</Num>
                     </span>
                   )}
+                  {d.held_by.length > 0 && <div className="held-row"><HeldNotes dish={d} /></div>}
                 </li>
               );
             })}
@@ -130,14 +131,19 @@ export function Brief(_: { route: Route }) {
                     <th scope="row">{dishName(view, a.dish, i18n)}</th>
                     <td>{a.kind === "price_scenario"
                       ? t("log_scenario", { from: money(a.from_price!), to: money(a.to_price!) })
-                      : t("log_dismissed", { reason: reasonText(a.reason!, a.note, i18n) })}</td>
+                      : a.kind === "kept_price"
+                        ? <>{t("log_kept", { price: money(a.from_price!), scenario: money(a.scenario_price!) })}
+                          {a.note && <span className="hint"> · “{a.note}”</span>}</>
+                        : t("log_dismissed", { reason: reasonText(a.reason!, a.note, i18n) })}</td>
                     <td className="num">{a.kind === "price_scenario" ? approx(a.monthly_change!) : "—"}</td>
                     <td>
                       {a.undone
                         ? <span className="pill neutral"><Icon name="undo" size={16} />{t("log_undone", { time: i18n.time(a.undone_at!) })}</span>
                         : a.kind === "price_scenario"
                           ? <span className="pill good"><Icon name="check" size={16} />{t("log_saved")}</span>
-                          : <span className="pill neutral"><Icon name="minus" size={16} />{t("log_dismissed_status")}</span>}
+                          : a.kind === "kept_price"
+                            ? <span className="pill neutral"><Icon name="check" size={16} />{t("log_kept_status")}</span>
+                            : <span className="pill neutral"><Icon name="minus" size={16} />{t("log_dismissed_status")}</span>}
                     </td>
                   </tr>
                 ))}

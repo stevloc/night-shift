@@ -55,9 +55,10 @@ export interface Approval {
   id: number;
   at: string;
   dish: string;
-  kind: "price_scenario" | "dismissed";
+  kind: "price_scenario" | "dismissed" | "kept_price";
   from_price?: number;
   to_price?: number;
+  scenario_price?: number;
   left_before?: number;
   left_after?: number;
   per_order_change?: number;
@@ -82,11 +83,15 @@ export interface Dish {
   in_store: { price: number; food_cost: number; left: number };
   status: DishStatus;
   held_by: string[];
+  /** Held ingredients: the last verified cost the dish keeps using until the owner confirms. */
+  held_inputs: (Pack & { ingredient: string; source: Source })[];
   monthly_orders: number;
+  /** The order history behind the monthly forecast. */
+  order_basis: { orders: number; days: number; from: string; to: string; days_per_month: number; forecast: number; edited: boolean } | null;
   cost_change_per_order: number;
   cost_change_monthly: number;
   proposal: Proposal | null;
-  decision: "open" | "approved" | "dismissed";
+  decision: "open" | "approved" | "dismissed" | "kept";
   dismiss_reason: { code: string; note: string } | null;
   approval: Approval | null;
 }
@@ -140,10 +145,24 @@ export interface Invoice {
   date: string;
   read_at: string;
   used_fallback: boolean;
+  /** "ai" = read by the model when it arrived; "saved" = replayed from a stored reading. */
+  extraction: "ai" | "saved";
+  superseded_by: number | null;
+  replaces: number | null;
   total: number | null;
   lines_sum: number;
   totals_match: boolean;
   lines: InvoiceLine[];
+}
+
+export interface DiffLine { original: string; quantity: number | null; pack_price: number | null }
+
+/** Same supplier + invoice number as a counted invoice, but different contents. Not counted until the owner chooses. */
+export interface PossibleCorrection {
+  id: number; file: string; read_at: string; supplier: string; invoice_no: string; date: string;
+  total: number | null; lines: number; extraction: "ai" | "saved";
+  of_invoice: number; of_file: string; of_read_at: string; of_total: number | null; of_lines: number;
+  only_new: DiffLine[]; only_counted: DiffLine[];
 }
 
 export interface Activity { id: number; at: string; kind: string; params: Record<string, any> }
@@ -168,6 +187,7 @@ export interface View {
   report: Report;
   invoices: Invoice[];
   duplicates: Duplicate[];
+  possible_corrections: PossibleCorrection[];
   activity: Activity[];
   decision_log: Approval[];
   ingredients: Record<string, { name: Names; pack_unit: string; yield_pct: number; source: Source }>;
@@ -234,7 +254,7 @@ export const api = {
   upload: (file: Blob, name: string) => {
     const form = new FormData();
     form.append("file", file, name);
-    return request<WithView & { invoice_id?: number; review?: number; duplicate_of?: string }>(
+    return request<WithView & { invoice_id?: number; review?: number; duplicate_of?: string; possible_correction?: string }>(
       "/api/invoices", { method: "POST", body: form });
   },
   lineImageUrl: (invoiceId: number, lineId: number) => `/api/invoices/${invoiceId}/lines/${lineId}/image`,
@@ -265,6 +285,9 @@ export const api = {
   undo: (dish: string) => request<WithView>(`/api/dishes/${dish}/undo`, send("POST")),
   dismiss: (dish: string, reason: string, note: string) =>
     request<WithView>(`/api/dishes/${dish}/dismiss`, send("POST", { reason, note })),
+  keep: (dish: string, note: string) => request<WithView>(`/api/dishes/${dish}/keep`, send("POST", { note })),
+  resolveCorrection: (id: number, choice: "keep_original" | "use_new") =>
+    request<WithView>(`/api/corrections/${id}`, send("POST", { choice })),
   restore: (dish: string) => request<WithView>(`/api/dishes/${dish}/restore`, send("POST")),
   saveSettings: (settings: Record<string, unknown>) => request<WithView>("/api/settings", send("PUT", settings)),
 };

@@ -8,6 +8,7 @@ import { dishStatus, errorText, fieldError, fieldErrors, ingredientName, packTex
 import { breakdownSources, costChangeSource, invoiceSource, monthlySource, ordersSource, perOrderSource, targetSource } from "../sources";
 import { Icon } from "../components/Icon";
 import { Num, type NumSource } from "../components/Num";
+import { HeldNotes } from "../components/Recommendation";
 
 export function DishDetail({ route }: { route: Route }) {
   const { view, setView, i18n, announce } = useApp();
@@ -90,6 +91,7 @@ export function DishDetail({ route }: { route: Route }) {
           <p className="notice warn"><Icon name="pause" />
             {t("held_detail", { ingredients: i18n.list(dish.held_by.map((k) => ingredientName(view, k, i18n))) })}</p>
         )}
+        <HeldNotes dish={dish} />
         <p className="hint row"><Icon name="info" size={16} />{t("excluded")} {t("num_hint")}</p>
       </div>
 
@@ -236,6 +238,7 @@ export function DishDetail({ route }: { route: Route }) {
           monthly: <Num source={monthlySource(p.per_order_change, dish, i18n)}>{money(p.monthly_change, true)}</Num>,
         })}</strong></p>}
         <p className="hint">{t("scenario_label", { orders: num(dish.monthly_orders) })}</p>
+        <p className="hint row"><Icon name="info" size={16} />{t("demand_note")}</p>
         {p && dish.decision === "open" && !editing && <a className="btn" href="#/brief"><Icon name="sun" />{t("approve_on_brief")}</a>}
       </section>
     </div>

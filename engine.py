@@ -33,7 +33,8 @@ from PIL import Image, ImageDraw
 
 import llm
 from data import (COMMISSION_CHOICES, DEFAULT_SETTINGS, DEMO_READINGS, DISHES, INBOX, INBOX_FILES, INGREDIENTS,
-                  OWNER_NAME, PREVIOUS_INVOICES, RESTAURANT_NAME, RESTAURANT_TZ, UNITS, reading_to_invoice)
+                  ORDER_HISTORY, OWNER_NAME, PREVIOUS_INVOICES, RESTAURANT_NAME, RESTAURANT_TZ, UNITS,
+                  reading_to_invoice)
 from margins import (BELOW_TARGET, COST_UP_OK, LOSES, breakdown, cents, food_cost, ingredient_lines,
                      monthly, proposed_price, same_dimension, status, to_base)
 
@@ -69,7 +70,8 @@ def new_state(settings=None):
         "settings": copy.deepcopy(settings or DEFAULT_SETTINGS),
         "invoices": [],
         "images": {},                             # invoice id -> ("file", path) or ("bytes", data)
-        "fingerprints": {},                       # supplier|number|total -> invoice id
+        "fingerprints": {},                       # supplier|number -> id of the invoice version that counts
+        "possible_corrections": [],               # same supplier + number, different contents: owner chooses
         "price_history_new": [],                  # prices applied this request (appended to price_history)
         "activity": [],                           # the timestamped log
         "decisions": {},                          # dish -> {"state", "price", "reason"}
@@ -208,8 +210,21 @@ def _norm(text):
 
 
 def fingerprint(supplier, invoice_no):
-    """Supplier + invoice number: two files with the same fingerprint are the same invoice."""
+    """Supplier + invoice number: two files with the same fingerprint claim to be the same invoice."""
     return f"{_norm(supplier)}|{_norm(invoice_no)}"
+
+
+def content_signature(total, lines):
+    """What the invoice says: printed total + every line (description, quantity, price per pack).
+    Same fingerprint + same signature = a duplicate. Same fingerprint, different signature = possibly corrected."""
+    rows = sorted(f"{_norm(l.get('original'))}|{l.get('quantity') or 0:g}|{l.get('pack_price') or 0:.2f}" for l in lines)
+    text = f"{total if total is not None else ''}#" + "#".join(rows)
+    return hashlib.sha256(text.encode()).hexdigest()[:16]
+
+
+def _counted(invoice):
+    """False for an invoice the owner replaced with a corrected version."""
+    return invoice.get("superseded_by") is None
 
 
 # ------------------------------------------------------------------ invoice checks
@@ -258,44 +273,79 @@ def process_invoice(image_bytes, mime_type, filename, at=None, client_ip=None):
     clock = (lambda: _night_time(1)) if at == "night" else _now
     demo = DEMO_READINGS.get(hashlib.sha256(image_bytes).hexdigest())
     if demo:
-        read, from_demo = reading_to_invoice(demo), True
+        read, from_demo, extraction = reading_to_invoice(demo), True, "saved"
     else:
-        if not llm.is_cached(image_bytes):
+        cached = llm.is_cached(image_bytes)
+        if not cached:
             if not llm.CONFIG.openrouter_api_key:
                 return {"error": "ai_not_configured"}
             allowed, wait = EXTRACTIONS.take(client_ip or "unknown")
             if not allowed:
                 return {"error": "rate_limited", "retry_minutes": max(1, math.ceil(wait / 60))}
         read, _failed = llm.extract_invoice(image_bytes, mime_type)
-        from_demo = False
+        # "saved" = replayed from a stored reading; "ai" = the model read this file just now.
+        from_demo, extraction = False, "saved" if cached else "ai"
         if not read:
             return {"error": "could_not_read"}
 
     fp = fingerprint(read["supplier"], read["invoice_no"])
+    sig = content_signature(read["total"], read["lines"])
+    rows = _detect_rows(image_bytes, len(read["lines"])) if mime_type.startswith("image/") else None
+    image = _store_image(image_bytes, mime_type, filename, demo)
     if read["invoice_no"] and fp in STATE["fingerprints"]:
-        original = STATE["invoices"][STATE["fingerprints"][fp]]
-        _log("duplicate_skipped", at=clock(), file=filename, supplier=read["supplier"], invoice_no=read["invoice_no"],
-             total=read["total"], of_file=original["file"], of_at=original["read_at"])
-        return {"duplicate_of": read["invoice_no"]}
+        counted = STATE["invoices"][STATE["fingerprints"][fp]]
+        same_as_pending = next((p for p in STATE["possible_corrections"]
+                                if p["fingerprint"] == fp and p["content_sig"] == sig), None)
+        if counted.get("content_sig") == sig or same_as_pending:
+            of = same_as_pending or counted
+            _log("duplicate_skipped", at=clock(), file=filename, supplier=read["supplier"], invoice_no=read["invoice_no"],
+                 total=read["total"], lines=len(read["lines"]), of_file=of["file"], of_at=of["read_at"])
+            return {"duplicate_of": read["invoice_no"]}
+        # Same supplier + number, different contents: don't count it, don't drop it. The owner chooses.
+        pending = {"id": len(STATE["possible_corrections"]), "status": "open", "file": filename, "read_at": clock(),
+                   "supplier": read["supplier"], "invoice_no": read["invoice_no"], "date": read["date"],
+                   "total": read["total"], "lines": read["lines"], "fingerprint": fp, "content_sig": sig,
+                   "of_invoice": counted["id"], "mime": mime_type, "rows": rows, "image": image,
+                   "extraction": extraction, "used_fallback": from_demo}
+        STATE["possible_corrections"].append(pending)
+        _log("possible_correction", at=pending["read_at"], file=filename, supplier=read["supplier"],
+             invoice_no=read["invoice_no"], total=read["total"], lines=len(read["lines"]),
+             of_file=counted["file"], of_total=counted["total"], of_lines=len(counted["lines"]))
+        return {"possible_correction": read["invoice_no"], "correction_id": pending["id"]}
 
-    invoice = {
-        "id": len(STATE["invoices"]), "file": filename, "read_at": clock(),
-        "supplier": read["supplier"], "invoice_no": read["invoice_no"], "date": read["date"],
-        "total": read["total"], "used_fallback": from_demo, "fingerprint": fp if read["invoice_no"] else None,
-        "mime": mime_type,
-        "rows": _detect_rows(image_bytes, len(read["lines"])) if mime_type.startswith("image/") else None,
-        "lines": [],
-    }
-    STATE["invoices"].append(invoice)
+    invoice = _count_invoice(read, file=filename, read_at=clock(), mime=mime_type, rows=rows, image=image,
+                             extraction=extraction, used_fallback=from_demo, fp=fp, sig=sig)
+    review = [l for l in invoice["lines"] if l["status"] == "needs_review"]
+    _log("recalculated", at=clock(), dishes=len(DISHES))
+    _log_dish_findings(clock)
+    return {"invoice_id": invoice["id"], "review": len(review), "used_fallback": from_demo, "extraction": extraction}
+
+
+def _store_image(image_bytes, mime_type, filename, demo):
+    """Where the file is kept: Storage in production, the demo inbox on disk, or memory (local uploads)."""
     if FILES is not None:   # production: every file goes to the private "invoices" bucket
         ext = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp", "application/pdf": ".pdf"}.get(mime_type, "")
         path = f"{STATE['restaurant_id']}/{hashlib.sha256(image_bytes).hexdigest()}{ext}"
         FILES.put(path, image_bytes, mime_type)
-        STATE["images"][invoice["id"]] = ("storage", path)
-    elif demo and (INBOX / filename).exists():   # local mode: demo images are on disk already
-        STATE["images"][invoice["id"]] = ("file", str(INBOX / filename))
-    else:
-        STATE["images"][invoice["id"]] = ("bytes", image_bytes)
+        return ("storage", path)
+    if demo and (INBOX / filename).exists():   # local mode: demo images are on disk already
+        return ("file", str(INBOX / filename))
+    return ("bytes", image_bytes)
+
+
+def _count_invoice(read, *, file, read_at, mime, rows, image, extraction, used_fallback, fp, sig, replaces=None):
+    """Add an invoice that counts: check each line, apply the verified prices. Caller recalculates."""
+    invoice = {
+        "id": len(STATE["invoices"]), "file": file, "read_at": read_at,
+        "supplier": read["supplier"], "invoice_no": read["invoice_no"], "date": read["date"],
+        "total": read["total"], "used_fallback": used_fallback,
+        # The DB allows one row per fingerprint, so a replacement keeps it only in memory (fingerprints map).
+        "fingerprint": fp if read["invoice_no"] and replaces is None else None,
+        "mime": mime, "rows": rows, "lines": [],
+        "extraction": extraction, "content_sig": sig, "replaces": replaces, "superseded_by": None,
+    }
+    STATE["invoices"].append(invoice)
+    STATE["images"][invoice["id"]] = tuple(image)
     if read["invoice_no"]:
         STATE["fingerprints"][fp] = invoice["id"]
 
@@ -313,13 +363,64 @@ def process_invoice(image_bytes, mime_type, filename, at=None, client_ip=None):
 
     review = [l for l in invoice["lines"] if l["status"] == "needs_review"]
     _log("invoice_read", at=invoice["read_at"], supplier=invoice["supplier"], invoice_no=invoice["invoice_no"],
-         lines=len(invoice["lines"]), review=len(review))
+         lines=len(invoice["lines"]), review=len(review), extraction=extraction)
     for line in invoice["lines"]:
         if line["status"] == "verified":
             _apply_line(invoice, line, at=invoice["read_at"])
-    _log("recalculated", at=clock(), dishes=len(DISHES))
-    _log_dish_findings(clock)
-    return {"invoice_id": invoice["id"], "review": len(review), "used_fallback": from_demo}
+    return invoice
+
+
+def resolve_correction(correction_id, choice):
+    """Owner decides which version of an invoice counts: the one already counted, or the new one."""
+    try:
+        pending = STATE["possible_corrections"][correction_id]
+    except (IndexError, TypeError):
+        return {"error": "not_found"}
+    if pending["status"] != "open":
+        return {"error": "already_resolved"}
+    if choice not in ("keep_original", "use_new"):
+        return {"error": "invalid", "fields": {"choice": "choose_one"}}
+    at = _now()
+    original = STATE["invoices"][pending["of_invoice"]]
+    pending.update(status=choice, resolved_at=at)
+    if choice == "keep_original":
+        _log("correction_resolved", at=at, choice=choice, invoice_no=pending["invoice_no"],
+             kept_file=original["file"], other_file=pending["file"])
+        return {}
+
+    before = {d: dish_view(d) for d in DISHES}
+    # Undo the original's prices (only where a later invoice hasn't already replaced them).
+    for line in reversed(original["lines"]):
+        src = STATE["sources"].get(line["ingredient"]) if line["applied"] else None
+        if src and src.get("invoice_id") == original["id"] and src.get("line_id") == line["id"]:
+            STATE["prices"][line["ingredient"]].update(line["prev"])
+            STATE["sources"][line["ingredient"]] = line["prev_source"]
+        line["applied"] = False
+    new = _count_invoice({k: pending[k] for k in ("supplier", "invoice_no", "date", "total", "lines")},
+                         file=pending["file"], read_at=at, mime=pending["mime"], rows=pending["rows"],
+                         image=pending["image"], extraction=pending["extraction"],
+                         used_fallback=pending["used_fallback"], fp=pending["fingerprint"],
+                         sig=pending["content_sig"], replaces=original["id"])
+    original["superseded_by"] = new["id"]
+    _log("correction_resolved", at=at, choice=choice, invoice_no=pending["invoice_no"],
+         kept_file=pending["file"], other_file=original["file"], total_from=original["total"], total_to=new["total"])
+    _log("recalculated", at=at, dishes=len(DISHES))
+    _log_effects(before, at, cause=pending["invoice_no"])
+    _log_dish_findings(_now)
+    return {"invoice_id": new["id"]}
+
+
+def _log_effects(before, at, cause):
+    """After a correction: log, per dish, what the recalculation changed (amount left, status)."""
+    for dish_id, old in before.items():
+        new = dish_view(dish_id)
+        old_state = "held" if old["held_by"] else old["status"]
+        new_state = "held" if new["held_by"] else new["status"]
+        if abs(new["now"]["left_exact"] - old["now"]["left_exact"]) > 0.0005 or old_state != new_state:
+            _log("correction_effect", at=at, dish=dish_id, cause=cause,
+                 food_from=old["now"]["food_cost"], food_to=new["now"]["food_cost"],
+                 left_from=old["now"]["left"], left_to=new["now"]["left"],
+                 status_from=old_state, status_to=new_state)
 
 
 def run_night_shift(seeded_clock=True):
@@ -398,7 +499,10 @@ def correct_line(invoice_id, line_id, fields):
     if errors:
         return {"error": "invalid", "fields": errors}
 
+    if not _counted(invoice):
+        return {"error": "superseded"}
     at = _now()
+    before = {d: dish_view(d) for d in DISHES}
     if line["applied"]:  # undo the old effect before applying the corrected one
         STATE["prices"][line["ingredient"]].update(line["prev"])
         STATE["sources"][line["ingredient"]] = line["prev_source"]
@@ -409,6 +513,7 @@ def correct_line(invoice_id, line_id, fields):
          per_unit=round(clean["pack_price"] / clean["pack_size"], 4),
          invoice_no=invoice["invoice_no"], original=line["original"])
     _log("recalculated", at=at, dishes=len(DISHES))
+    _log_effects(before, at, cause=invoice["invoice_no"])
     _log_dish_findings(_now)
     return {}
 
@@ -503,7 +608,7 @@ def invoice_image(invoice_id):
 def _held_by(dish_id):
     """Ingredients of this dish that have an invoice line waiting for review."""
     recipe = STATE["recipes"][dish_id]
-    return sorted({l["ingredient"] for inv in STATE["invoices"] for l in inv["lines"]
+    return sorted({l["ingredient"] for inv in STATE["invoices"] if _counted(inv) for l in inv["lines"]
                    if l["status"] == "needs_review" and l["ingredient"] in recipe})
 
 
@@ -551,6 +656,12 @@ def dish_view(dish_id, proposal_override=None, recipe_override=None):
         line["source"] = STATE["sources"][line["ingredient"]]
         line["recipe_amount"] = DISHES[dish_id]["recipe"][line["ingredient"]][0]  # original recipe card
 
+    # Held: the dish keeps using the last verified cost of each held ingredient until the owner confirms.
+    held_inputs = [{"ingredient": k, **{f: STATE["prices"][k][f] for f in ("pack_size", "pack_unit", "pack_price")},
+                    "source": STATE["sources"][k]} for k in held_by]
+    history = ORDER_HISTORY.get(dish_id)
+    order_basis = history and {**history, "edited": orders != history["forecast"]}
+
     decision = STATE["decisions"].get(dish_id, {"state": "open", "price": None, "reason": None})
     scenario = None
     if dish_status in (LOSES, BELOW_TARGET) and not held_by:
@@ -582,7 +693,9 @@ def dish_view(dish_id, proposal_override=None, recipe_override=None):
                      "left": cents(dish["prices"]["in_store"] - food_now)},
         "status": dish_status,
         "held_by": held_by,
+        "held_inputs": held_inputs,
         "monthly_orders": orders,
+        "order_basis": order_basis,
         "cost_change_per_order": cost_change,
         "cost_change_monthly": cents(monthly(cost_change_exact, orders)),
         "proposal": scenario,
@@ -713,9 +826,27 @@ def dismiss(dish_id, reason, note=""):
     return {}
 
 
+def keep_price(dish_id, note=""):
+    """The owner keeps the current DoorDash price on purpose. Saved to the decision log (reason optional)."""
+    view = dish_view(dish_id)
+    if not view["proposal"]:
+        return {"error": "no_proposal"}
+    note = (note or "").strip()[:200]
+    p = view["proposal"]
+    STATE["decision_log"].append({
+        "id": len(STATE["decision_log"]), "at": _now(), "dish": dish_id, "kind": "kept_price",
+        "from_price": view["now"]["price"], "to_price": view["now"]["price"], "scenario_price": p["price"],
+        "left_before": view["now"]["left"], "monthly_orders": view["monthly_orders"],
+        "reason": "kept_price", "note": note, "user_id": STATE.get("actor"), "published": False, "undone": False})
+    _decision(dish_id).update(state="kept", reason={"code": "kept_price", "note": note})
+    _log("kept_price", dish=dish_id, price=view["now"]["price"], note=note)
+    return {}
+
+
 def restore(dish_id):
+    """Reopen a dismissed or kept-price decision (the log entry is marked undone, never deleted)."""
     record = next((a for a in reversed(STATE["decision_log"])
-                   if a["dish"] == dish_id and a["kind"] == "dismissed" and not a["undone"]), None)
+                   if a["dish"] == dish_id and a["kind"] in ("dismissed", "kept_price") and not a["undone"]), None)
     if record:
         record.update(undone=True, undone_at=_now())
     _decision(dish_id).update(state="open", reason=None)
@@ -772,6 +903,8 @@ def bookkeeper_csv():
                      "unit_price", "line_total", "pack_size", "pack_unit", "ingredient",
                      "line_status", "invoice_total_printed", "invoice_lines_sum", "totals_match"])
     for inv in STATE["invoices"]:
+        if not _counted(inv):   # the owner chose a corrected version of this invoice instead
+            continue
         for line in inv["lines"]:
             qty, price = line["quantity"], line["pack_price"]
             reasons = [r.replace("_", " ").replace("missing ", "missing: ")
@@ -801,8 +934,11 @@ def _report(dishes):
     """Three separate groups. Every 'verified' item includes the evidence that was checked."""
     verified, needs_input, proposed = [], [], []
     for inv in STATE["invoices"]:
+        if not _counted(inv):
+            continue
         verified.append({"kind": "invoice_new", "at": inv["read_at"], "file": inv["file"],
-                         "supplier": inv["supplier"], "invoice_no": inv["invoice_no"], "total": inv["total"]})
+                         "supplier": inv["supplier"], "invoice_no": inv["invoice_no"], "total": inv["total"],
+                         "extraction": inv.get("extraction"), "replaces": inv.get("replaces")})
         item = {"at": inv["read_at"], "invoice_no": inv["invoice_no"], "lines": len(inv["lines"]),
                 "lines_sum": inv["lines_sum"], "total": inv["total"]}
         (verified if inv["totals_match"] else needs_input).append(
@@ -819,10 +955,15 @@ def _report(dishes):
                                     "line_id": l["id"], "invoice_no": inv["invoice_no"], "original": l["original"],
                                     "reasons": l["reasons"], "ingredient": l["ingredient"],
                                     "dishes": [d for d in DISHES if l["ingredient"] in STATE["recipes"][d]]})
+    for pc in _open_corrections():
+        needs_input.append({"kind": "possible_correction", "at": pc["read_at"], **pc})
     for dup in _logged("duplicate_skipped"):
         verified.append({"kind": "duplicate_skipped", **dup})
     for c in _logged("owner_confirmed"):
         verified.append({"kind": "owner_confirmed", **c})
+    for kind in ("correction_resolved", "correction_effect"):
+        for item in _logged(kind):
+            verified.append({"kind": kind, **item})
     recalcs = [a for a in STATE["activity"] if a["kind"] == "recalculated"]
     if recalcs:
         verified.append({"kind": "recalculated", "at": recalcs[-1]["at"], "dishes": len(DISHES),
@@ -841,6 +982,32 @@ def _report(dishes):
                              "approved_at": d["approval"]["at"] if d["approval"] else None})
     verified.sort(key=lambda x: x["at"])
     return {"verified": verified, "needs_input": needs_input, "proposed": proposed}
+
+
+def _line_key(line):
+    return (_norm(line.get("original")), line.get("quantity"), line.get("pack_price"))
+
+
+def _open_corrections():
+    """Possible corrected invoices waiting for the owner, with what differs from the counted version."""
+    out = []
+    for pc in STATE["possible_corrections"]:
+        if pc["status"] != "open":
+            continue
+        original = STATE["invoices"][pc["of_invoice"]]
+        old_keys = {_line_key(l) for l in original["lines"]}
+        new_keys = {_line_key(l) for l in pc["lines"]}
+        pick = lambda l: {"original": l.get("original"), "quantity": l.get("quantity"), "pack_price": l.get("pack_price")}
+        out.append({
+            "id": pc["id"], "file": pc["file"], "read_at": pc["read_at"], "supplier": pc["supplier"],
+            "invoice_no": pc["invoice_no"], "date": pc["date"], "total": pc["total"], "lines": len(pc["lines"]),
+            "extraction": pc["extraction"],
+            "of_invoice": original["id"], "of_file": original["file"], "of_read_at": original["read_at"],
+            "of_total": original["total"], "of_lines": len(original["lines"]),
+            "only_new": [pick(l) for l in pc["lines"] if _line_key(l) not in old_keys],
+            "only_counted": [pick(l) for l in original["lines"] if _line_key(l) not in new_keys],
+        })
+    return out
 
 
 def view():
@@ -876,6 +1043,8 @@ def view():
                           "line_total": cents(l["quantity"] * l["pack_price"]) if l["quantity"] and l["pack_price"] else None})
         invoices.append({**{k: inv[k] for k in ("id", "file", "supplier", "invoice_no", "date", "read_at",
                                                  "used_fallback", "total", "lines_sum", "totals_match")},
+                         "extraction": inv.get("extraction") or ("saved" if inv["used_fallback"] else "ai"),
+                         "superseded_by": inv.get("superseded_by"), "replaces": inv.get("replaces"),
                          "lines": lines})
 
     return {
@@ -891,6 +1060,7 @@ def view():
         "report": _report(dishes),
         "invoices": invoices,
         "duplicates": _logged("duplicate_skipped"),
+        "possible_corrections": _open_corrections(),
         "timezone": RESTAURANT_TZ,
         "activity": STATE["activity"],
         "decision_log": STATE["decision_log"],

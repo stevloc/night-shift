@@ -65,11 +65,27 @@ export function activityText(entry: Activity, view: View, i18n: I18n): string {
     case "dismissed":
       return p.reason ? t("ev_dismissed_reason", { dish: dish(p.dish), reason: reasonText(p.reason, p.note, i18n) })
         : t("ev_dismissed", { dish: dish(p.dish) });
+    case "kept_price":
+      return t(p.note ? "ev_kept_price_note" : "ev_kept_price", { dish: dish(p.dish), price: money(p.price), note: p.note ?? "" });
+    case "possible_correction": return t("ev_possible_correction", { no: p.invoice_no, file: p.file });
+    case "correction_resolved": return t("ev_correction_resolved", { no: p.invoice_no, kept: p.kept_file });
+    case "correction_effect":
+      return t("ev_correction_effect", { dish: dish(p.dish), cause: p.cause, left_from: money(p.left_from), left_to: money(p.left_to) });
     case "undone": case "restored": return t(`ev_${entry.kind}` as Key, { dish: dish(p.dish) });
     case "settings_changed":
       return t("ev_settings_changed", { commission: pctPoints(p.commission_pct), target: pctPoints(p.target_margin_pct) });
     default: return entry.kind;
   }
+}
+
+/** A status code from the log ("held", "below_target", ...) as the same words the status pill uses. */
+export function statusWords(code: string, i18n: I18n) {
+  return i18n.t(code === "held" ? "st_held" : (`st_${code}` as Key));
+}
+
+/** "$38.00 / 500 sheets" */
+export function costText(pack: Pack, i18n: I18n) {
+  return `${i18n.money(pack.pack_price)} / ${packText(pack, i18n)}`;
 }
 
 export function reasonText(code: string, note: string | undefined, i18n: I18n) {

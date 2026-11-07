@@ -86,8 +86,84 @@ def test_health_and_upload_guards():
     assert c.post("/api/invoices", files={"file": ("lotus.png", demo, "image/png")}).status_code == 200
 
 
+def _fake_upload(client, monkeypatch, number="RM-20419", bump=0.0, name="corrected.png"):
+    """Upload a file whose (fake) saved reading is invoice `number`, with one price changed by `bump`."""
+    import copy, hashlib, engine
+    reading = copy.deepcopy(next(r for r in engine.DEMO_READINGS.values() if r["number"] == number))
+    reading["lines"][0]["unit_price"] = round(reading["lines"][0]["unit_price"] + bump, 2)
+    reading["lines"][0]["amount"] = round(reading["lines"][0]["unit_price"] * reading["lines"][0]["qty"], 2)
+    reading["total"] = round(sum(l["amount"] for l in reading["lines"]), 2)
+    data = b"\x89PNG\r\n\x1a\n" + name.encode() + str(bump).encode()
+    monkeypatch.setitem(engine.DEMO_READINGS, hashlib.sha256(data).hexdigest(), reading)
+    return client.post("/api/invoices", files={"file": (name, data, "image/png")})
+
+
+def test_saved_readings_are_labelled_as_replays():
+    _, view = run_demo()
+    assert view["invoices"] and all(inv["extraction"] == "saved" for inv in view["invoices"])
+
+
+def test_same_number_same_contents_is_a_duplicate(monkeypatch):
+    client, _ = run_demo()
+    r = _fake_upload(client, monkeypatch, bump=0.0, name="again.png").json()
+    assert r["duplicate_of"] == "RM-20419"
+    assert r["view"]["possible_corrections"] == []
+
+
+def test_same_number_different_contents_is_held_then_owner_chooses(monkeypatch):
+    client, before = run_demo()
+    brisket_before = next(d for d in before["dishes"] if d["id"] == "brisket-pho")["now"]["food_cost"]
+    r = _fake_upload(client, monkeypatch, bump=10.0).json()
+    assert r["possible_correction"] == "RM-20419"
+    pcs = r["view"]["possible_corrections"]
+    assert len(pcs) == 1 and pcs[0]["only_new"] and pcs[0]["only_counted"]
+    assert any(i["kind"] == "possible_correction" for i in r["view"]["report"]["needs_input"])
+    assert len(r["view"]["invoices"]) == 3            # not counted yet
+    v = client.post(f"/api/corrections/{pcs[0]['id']}", json={"choice": "use_new"}).json()["view"]
+    old = next(i for i in v["invoices"] if i["invoice_no"] == "RM-20419" and i["superseded_by"] is not None)
+    new = next(i for i in v["invoices"] if i["replaces"] == old["id"])
+    assert new["total"] != old["total"] and v["possible_corrections"] == []
+    brisket_after = next(d for d in v["dishes"] if d["id"] == "brisket-pho")["now"]["food_cost"]
+    assert brisket_after > brisket_before             # the corrected (higher) price now counts
+    assert any(a["kind"] == "correction_effect" for a in v["activity"])
+    csv_text = client.get("/api/export/bookkeeper.csv").text
+    assert csv_text.count("RM-20419") == len(new["lines"])   # only one version is counted
+    # The corrected version arriving again is now just a duplicate.
+    assert _fake_upload(client, monkeypatch, bump=10.0, name="again.png").json()["duplicate_of"] == "RM-20419"
+
+
+def test_keep_current_price_is_logged_with_optional_reason():
+    client, _ = run_demo()
+    v = client.post("/api/dishes/brisket-pho/keep", json={"note": "Regulars order it daily"}).json()["view"]
+    rec = v["decision_log"][-1]
+    assert rec["kind"] == "kept_price" and rec["note"] == "Regulars order it daily" and rec["published"] is False
+    assert next(d for d in v["dishes"] if d["id"] == "brisket-pho")["decision"] == "kept"
+    v = client.post("/api/dishes/brisket-pho/restore").json()["view"]
+    assert next(d for d in v["dishes"] if d["id"] == "brisket-pho")["decision"] == "open"
+
+
+def test_held_dish_shows_previous_cost_and_correction_logs_effect():
+    client, view = run_demo()
+    spring = next(d for d in view["dishes"] if d["id"] == "spring-rolls-2")
+    held = spring["held_inputs"]
+    assert [h["ingredient"] for h in held] == ["rice_paper"] and held[0]["source"]["date"]
+    review = view["report"]["needs_input"][0]
+    v = client.post(f"/api/invoices/{review['invoice_id']}/lines/{review['line_id']}",
+                    json={"ingredient": "rice_paper", "packs": "10", "per_pack": "50", "pack_unit": "sheet",
+                          "pack_price": "38.00"}).json()["view"]
+    effects = [a["params"] for a in v["activity"] if a["kind"] == "correction_effect"]
+    assert any(e["dish"] == "spring-rolls-2" and e["status_from"] == "held" for e in effects)
+
+
+def test_order_basis_explains_the_forecast():
+    _, view = run_demo()
+    basis = next(d for d in view["dishes"] if d["id"] == "brisket-pho")["order_basis"]
+    assert basis["days"] == 28 and basis["forecast"] == round(basis["orders"] / 28 * basis["days_per_month"])
+
+
 if __name__ == "__main__":
+    import inspect
     for name, fn in list(globals().items()):
-        if name.startswith("test_"):
+        if name.startswith("test_") and not inspect.signature(fn).parameters:   # monkeypatch tests: use pytest
             fn()
             print("ok", name)

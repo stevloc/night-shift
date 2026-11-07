@@ -1,11 +1,11 @@
-// One dish that needs a price decision. Three action choices:
-//   Review supplier change · Compare price scenario · Dismiss with reason.
-// Approving a scenario only saves it to the decision log; Night Shift never changes DoorDash.
+// One dish that needs a price decision. Four decisions, side by side:
+//   Approve · Edit · Keep current price · Dismiss   (plus "Review supplier change" for the evidence).
+// Every decision is saved to the decision log; Night Shift never changes DoorDash.
 
 import { useEffect, useId, useRef, useState } from "react";
 import { api, type Dish } from "../api";
 import { focusLater, useApp } from "../context";
-import { dishStatus, errorText, fieldError, fieldErrors, packText, reasonText } from "../format";
+import { costText, dishStatus, errorText, fieldError, fieldErrors, ingredientName, packText, reasonText } from "../format";
 import type { Key } from "../i18n";
 import {
   breakdownSources, costChangeSource, invoiceSource, monthlySource, ordersSource, pctChangeSource,
@@ -17,7 +17,7 @@ import { AuthImage } from "./AuthImage";
 import { Num } from "./Num";
 
 const UNDO_SECONDS = 10;
-type Panel = "supplier" | "scenario" | null;
+type Panel = "supplier" | null;
 
 export function RecommendationCard({ dish }: { dish: Dish }) {
   const { view, setView, i18n, announce } = useApp();
@@ -26,6 +26,7 @@ export function RecommendationCard({ dish }: { dish: Dish }) {
   const [justSaved, setJustSaved] = useState(false);
   const [editing, setEditing] = useState(false);
   const [dismissing, setDismissing] = useState(false);
+  const [keeping, setKeeping] = useState(false);
   const dishLabel = name(dish.name);
   const headingId = `rec-${dish.id}`;
   const status = dishStatus(dish, i18n);
@@ -45,27 +46,30 @@ export function RecommendationCard({ dish }: { dish: Dish }) {
         focusLater(`undo-${dish.id}`);
       } else if (action === "undo") {
         setJustSaved(false);
-        setPanel("scenario");
         announce(t("undone_announce", { dish: dishLabel }));
         focusLater(`approve-${dish.id}`);
       } else {
         announce(t("restored_announce", { dish: dishLabel }));
-        focusLater(`act-scenario-${dish.id}`);
+        focusLater(`approve-${dish.id}`);
       }
     } catch (e) {
       announce(errorText(e, i18n));
     }
   }
 
-  if (dish.decision === "dismissed") {
+  if (dish.decision === "dismissed" || dish.decision === "kept") {
+    const kept = dish.decision === "kept";
+    const note = dish.dismiss_reason?.note;
     return (
       <article className="card rec dismissed" aria-labelledby={headingId}>
         <div className="card-head">
           <h3 id={headingId}>{dishLabel}</h3>
-          <span className="pill neutral"><Icon name="minus" size={16} />
-            {t("dismissed_with", { reason: dish.dismiss_reason ? reasonText(dish.dismiss_reason.code, dish.dismiss_reason.note, i18n) : "" })}
+          <span className="pill neutral"><Icon name={kept ? "check" : "minus"} size={16} />
+            {kept ? t("kept_with", { price: money(dish.now.price) })
+              : t("dismissed_with", { reason: dish.dismiss_reason ? reasonText(dish.dismiss_reason.code, dish.dismiss_reason.note, i18n) : "" })}
           </span>
         </div>
+        {kept && note && <p className="hint">“{note}”</p>}
         <div className="row">
           <button id={`restore-${dish.id}`} type="button" className="btn" onClick={() => act("restore")}>
             <Icon name="undo" />{t("restore")}
@@ -84,6 +88,8 @@ export function RecommendationCard({ dish }: { dish: Dish }) {
         <h3 id={headingId}>{dishLabel}</h3>
         <span className={`pill ${status.tone}`}><Icon name={status.icon} size={16} />{status.text}</span>
       </div>
+
+      <HeldNotes dish={dish} />
 
       {change && (
         <p className="cause">
@@ -139,20 +145,52 @@ export function RecommendationCard({ dish }: { dish: Dish }) {
         </div>
       ) : p && (
         <>
+          <section id={`${headingId}-scenario`} className="rec-block proposal" aria-labelledby={`${headingId}-scenario-h`}>
+            <h4 id={`${headingId}-scenario-h`}>{t("scenario_title")}</h4>
+            <p className="proposal-line">{rich(p.edited ? "scenario_price_edited" : "scenario_price", {
+              from: <Num source={now.price}>{money(dish.now.price)}</Num>,
+              to: <Num source={breakdownSources(dish, p.after, view, i18n, p).price}>{money(p.price)}</Num> })}</p>
+            <ul className="proposal-facts">
+              <li><Icon name="checkCircle" size={18} /><span>{rich("scenario_left", {
+                before: <Num source={now.left}>{money(dish.now.left)}</Num>,
+                after: <Num source={breakdownSources(dish, p.after, view, i18n, p).left}>{money(p.after.left)}</Num>,
+                pct: <Num source={breakdownSources(dish, p.after, view, i18n, p).margin_pct}>{pctPoints(p.after.margin_pct)}</Num> })}</span></li>
+              <li><Icon name="dollar" size={18} /><strong>{rich("scenario_per_order", {
+                change: <Num source={perOrderSource(dish, p, view, i18n)}>{money(p.per_order_change, true)}</Num> })}</strong></li>
+              <li><Icon name="clock" size={18} /><span>{rich("scenario_monthly", {
+                monthly: <Num source={monthlySource(p.per_order_change, dish, i18n)}><strong>{approx(p.monthly_change)}</strong></Num> })}</span></li>
+            </ul>
+            <p className="hint">{rich("scenario_label", {
+              orders: <Num source={ordersSource(dish, i18n)}>{i18n.num(dish.monthly_orders)}</Num> })}</p>
+            <p className="hint row"><Icon name="info" size={16} />{t("demand_note")}</p>
+            {p.edited && <p className="hint">{t("edited_note", { suggested: money(p.suggested) })}</p>}
+            {!p.reaches_target && <p className="notice warn"><Icon name="alert" />{t("still_below")}</p>}
+          </section>
+
           <div className="choices" role="group" aria-label={t("proposed_action")}>
-            <button id={`act-supplier-${dish.id}`} type="button" className="btn" aria-expanded={panel === "supplier"}
-              aria-controls={`${headingId}-supplier`} onClick={() => toggle("supplier")}>
-              <Icon name="receipt" />{t("act_review")}
+            <button id={`approve-${dish.id}`} type="button" className="btn btn-primary" onClick={() => act("approve")}
+              aria-label={t("approve_aria", { dish: dishLabel, price: money(p.price) })}>
+              <Icon name="check" />{t("approve_scenario")}
             </button>
-            <button id={`act-scenario-${dish.id}`} type="button" className="btn btn-primary" aria-expanded={panel === "scenario"}
-              aria-controls={`${headingId}-scenario`} onClick={() => toggle("scenario")}>
-              <Icon name="dollar" />{t("act_compare")}
+            <button type="button" className="btn" onClick={() => setEditing(true)} aria-label={t("edit_aria", { dish: dishLabel })}>
+              <Icon name="edit" />{t("change_price")}
             </button>
-            <button type="button" className="btn btn-ghost" onClick={() => setDismissing(true)}>
+            <button id={`keep-${dish.id}`} type="button" className="btn" onClick={() => setKeeping(true)}
+              aria-label={t("keep_aria", { dish: dishLabel })}>
+              <Icon name="minus" />{t("keep_current")}
+            </button>
+            <button type="button" className="btn btn-ghost" onClick={() => setDismissing(true)}
+              aria-label={t("dismiss_aria", { dish: dishLabel })}>
               <Icon name="x" />{t("act_dismiss")}
             </button>
           </div>
 
+          {change && (
+            <button id={`act-supplier-${dish.id}`} type="button" className="btn btn-ghost" aria-expanded={panel === "supplier"}
+              aria-controls={`${headingId}-supplier`} onClick={() => toggle("supplier")}>
+              <Icon name="receipt" />{t("act_review")}
+            </button>
+          )}
           <section id={`${headingId}-supplier`} className="rec-block" hidden={panel !== "supplier"}
             aria-labelledby={`${headingId}-supplier-h`}>
             <h4 id={`${headingId}-supplier-h`}>{t("supplier_title")}</h4>
@@ -174,38 +212,6 @@ export function RecommendationCard({ dish }: { dish: Dish }) {
             )}
             <a href="#/invoices">{t("open_invoice")} <Icon name="chevron" size={16} /></a>
           </section>
-
-          <section id={`${headingId}-scenario`} className="rec-block proposal" hidden={panel !== "scenario"}
-            aria-labelledby={`${headingId}-scenario-h`}>
-            <h4 id={`${headingId}-scenario-h`}>{t("scenario_title")}</h4>
-            <p className="hint">{rich("scenario_label", {
-              orders: <Num source={ordersSource(dish, i18n)}>{i18n.num(dish.monthly_orders)}</Num> })}</p>
-            <p className="proposal-line">{rich("scenario_price", {
-              from: <Num source={now.price}>{money(dish.now.price)}</Num>,
-              to: <Num source={breakdownSources(dish, p.after, view, i18n, p).price}>{money(p.price)}</Num> })}</p>
-            <ul className="proposal-facts">
-              <li><Icon name="checkCircle" size={18} /><span>{rich("scenario_left", {
-                before: <Num source={now.left}>{money(dish.now.left)}</Num>,
-                after: <Num source={breakdownSources(dish, p.after, view, i18n, p).left}>{money(p.after.left)}</Num>,
-                pct: <Num source={breakdownSources(dish, p.after, view, i18n, p).margin_pct}>{pctPoints(p.after.margin_pct)}</Num> })}</span></li>
-              <li><Icon name="dollar" size={18} /><strong>{rich("scenario_per_order", {
-                change: <Num source={perOrderSource(dish, p, view, i18n)}>{money(p.per_order_change, true)}</Num> })}</strong></li>
-              <li><Icon name="clock" size={18} /><strong>{rich("scenario_monthly", {
-                monthly: <Num source={monthlySource(p.per_order_change, dish, i18n)}>{approx(p.monthly_change)}</Num> })}</strong></li>
-            </ul>
-            {p.edited && <p className="hint">{t("edited_note", { suggested: money(p.suggested) })}</p>}
-            {!p.reaches_target && <p className="notice warn"><Icon name="alert" />{t("still_below")}</p>}
-            <div className="actions">
-              <button id={`approve-${dish.id}`} type="button" className="btn btn-primary btn-lg" onClick={() => act("approve")}
-                aria-label={t("approve_aria", { dish: dishLabel, price: money(p.price) })}>
-                <Icon name="check" />{t("approve_scenario")}
-              </button>
-              <button type="button" className="btn btn-lg" onClick={() => setEditing(true)}
-                aria-label={t("edit_aria", { dish: dishLabel })}>
-                <Icon name="edit" />{t("change_price")}
-              </button>
-            </div>
-          </section>
         </>
       )}
 
@@ -218,7 +224,66 @@ export function RecommendationCard({ dish }: { dish: Dish }) {
 
       {editing && p && <EditPriceDialog dish={dish} onClose={() => setEditing(false)} />}
       {dismissing && <DismissDialog dish={dish} onClose={() => setDismissing(false)} />}
+      {keeping && <KeepPriceDialog dish={dish} onClose={() => setKeeping(false)} />}
     </article>
+  );
+}
+
+/** For each held ingredient: the cost the dish is still using, and where it came from. */
+export function HeldNotes({ dish }: { dish: Dish }) {
+  const { view, i18n } = useApp();
+  if (!dish.held_inputs?.length) return null;
+  return (
+    <div className="notice warn">
+      <Icon name="pause" />
+      <div>
+        {dish.held_inputs.map((h) => (
+          <p key={h.ingredient}>{i18n.rich("held_using", {
+            ingredient: ingredientName(view, h.ingredient, i18n),
+            cost: <Num source={invoiceSource(h.source, i18n)}>{costText(h, i18n)}</Num>,
+            date: i18n.day(h.source.date),
+          })}</p>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Keep the current price on purpose. The reason is optional; the decision goes to the log. */
+function KeepPriceDialog({ dish, onClose }: { dish: Dish; onClose: () => void }) {
+  const { setView, i18n, announce } = useApp();
+  const { t, money, name } = i18n;
+  const [note, setNote] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const id = useId();
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    try {
+      setView((await api.keep(dish.id, note)).view);
+      announce(t("kept_announce", { dish: name(dish.name), price: money(dish.now.price) }));
+      onClose();
+      focusLater(`restore-${dish.id}`);
+    } catch (err) {
+      setError(errorText(err, i18n));
+    }
+  }
+
+  return (
+    <Dialog open title={t("keep_title", { dish: name(dish.name) })} onClose={onClose} closeLabel={t("close")}>
+      <form className="stack" onSubmit={submit} noValidate>
+        <p>{t("keep_body", { price: money(dish.now.price) })}</p>
+        <div className="field">
+          <label htmlFor={`${id}-note`}>{t("keep_note_label")}</label>
+          <input id={`${id}-note`} type="text" value={note} maxLength={200} onChange={(e) => setNote(e.target.value)} />
+        </div>
+        {error && <p className="field-error"><Icon name="alert" size={18} />{error}</p>}
+        <div className="dialog-actions">
+          <button type="button" className="btn" onClick={onClose}>{t("cancel")}</button>
+          <button type="submit" className="btn btn-primary"><Icon name="check" />{t("keep_confirm", { price: money(dish.now.price) })}</button>
+        </div>
+      </form>
+    </Dialog>
   );
 }
 
@@ -347,10 +412,11 @@ function EditPriceDialog({ dish, onClose }: { dish: Dish; onClose: () => void })
             <Icon name={preview.reaches_target ? "checkCircle" : "alert"} />
             {t("edit_preview", {
               left: money(preview.after.left), pct: pctPoints(preview.after.margin_pct),
-              monthly: approx(preview.monthly_change), volume: t("volume_note"),
+              monthly: approx(preview.monthly_change),
             })}
           </p>
         )}
+        <p className="hint row"><Icon name="info" size={16} />{t("demand_note")}</p>
         <div className="dialog-actions">
           <button type="button" className="btn" onClick={onClose}>{t("cancel")}</button>
           <button type="submit" className="btn btn-primary"><Icon name="check" />{t("edit_save")}</button>
