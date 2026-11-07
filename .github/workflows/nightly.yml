@@ -1,41 +1,76 @@
-# Night Shift's nightly run: 11:40 PM America/New_York, every night.
+# Night Shift's scheduled overnight run: 3:30 AM America/New_York, every night.
 #
-# GitHub cron is always UTC and has no daylight saving, so two schedules are listed:
-#   03:40 UTC = 11:40 PM EDT (summer, UTC-4)     04:40 UTC = 11:40 PM EST (winter, UTC-5)
-# The job checks the New York clock and only calls the app from the one that is really 11 PM there.
-# (GitHub can start scheduled jobs a few minutes late; the hour check allows for that.)
+# It calls the existing authenticated endpoint POST /api/nightly-run on Render (scripts/nightly_client.py),
+# so the run uses the deployed engine, its Supabase connection and its OpenRouter key: the only secrets
+# GitHub needs are the URL and CRON_SECRET. It never triggers "Review my options" or "Investigate this
+# alert", and it never approves or publishes anything.
+#
+# GitHub cron is UTC with no daylight saving, so two schedules are listed:
+#   07:30 UTC = 3:30 AM EDT (summer, UTC-4)     08:30 UTC = 3:30 AM EST (winter, UTC-5)
+# The gate step compares the schedule that fired with New York's current UTC offset, so exactly one of
+# them runs each day, even if GitHub starts it late. Scheduled workflows only run from the default branch.
+#
+# Duplicate protection: one run at a time here (concurrency group), one at a time on the server (409),
+# and a run key per New York date (X-Run-Key): a retry or a second trigger that day reports the earlier
+# counts instead of running again. Invoices are never counted twice regardless (fingerprint check).
 name: Nightly run
 
 on:
   schedule:
-    - cron: "40 3 * * *"
-    - cron: "40 4 * * *"
-  workflow_dispatch: {}   # "Run workflow" button for a manual test
+    - cron: "30 7 * * *"
+    - cron: "30 8 * * *"
+  workflow_dispatch:
+    inputs:
+      run_key:
+        description: >-
+          Optional run key. Empty = today's New York date (skipped if tonight's run already completed).
+          Use a new value such as manual-test-1 to force a fresh run.
+        required: false
+        default: ""
 
-permissions: {}
+permissions:
+  contents: read
+
+concurrency:
+  group: night-shift-nightly-run
+  cancel-in-progress: false   # never cancel a run that may be writing; queue the next one
 
 jobs:
   nightly:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
-      - name: Call POST /api/nightly-run
+      - name: Is it 3:30 AM in New York for this schedule?
+        id: gate
+        env:
+          EVENT: ${{ github.event_name }}
+          SCHEDULE: ${{ github.event.schedule }}
+        run: |
+          offset=$(TZ=America/New_York date +%z)
+          if [ "$EVENT" != "schedule" ]; then
+            echo "Manual run."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          elif { [ "$offset" = "-0400" ] && [ "$SCHEDULE" = "30 7 * * *" ]; } || \
+               { [ "$offset" = "-0500" ] && [ "$SCHEDULE" = "30 8 * * *" ]; }; then
+            echo "Scheduled run for 3:30 AM New York (UTC offset $offset)."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Schedule '$SCHEDULE' is not 3:30 AM in New York today (UTC offset $offset); the other one runs."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check out the client script
+        if: steps.gate.outputs.run == 'true'
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts/nightly_client.py
+          sparse-checkout-cone-mode: false
+
+      - name: Run Night Shift (POST /api/nightly-run)
+        if: steps.gate.outputs.run == 'true'
         env:
           NIGHTSHIFT_URL: ${{ secrets.NIGHTSHIFT_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
-          EVENT: ${{ github.event_name }}
-        run: |
-          hour=$(TZ=America/New_York date +%H)
-          if [ "$EVENT" = "schedule" ] && [ "$hour" != "23" ]; then
-            echo "It is ${hour}:xx in New York; the other schedule handles tonight."
-            exit 0
-          fi
-          if [ -z "$NIGHTSHIFT_URL" ] || [ -z "$CRON_SECRET" ]; then
-            echo "Missing repo secrets NIGHTSHIFT_URL and/or CRON_SECRET." >&2
-            exit 1
-          fi
-          # Render's free plan sleeps when idle: wake it, then run (retries cover the cold start).
-          curl --silent --show-error --max-time 120 --retry 5 --retry-delay 20 --retry-all-errors \
-            "${NIGHTSHIFT_URL%/}/api/health" > /dev/null
-          curl --fail-with-body --silent --show-error --max-time 600 --retry 2 --retry-delay 30 \
-            -X POST -H "X-Cron-Secret: ${CRON_SECRET}" "${NIGHTSHIFT_URL%/}/api/nightly-run"
+          RUN_KEY: ${{ inputs.run_key }}
+        run: python3 scripts/nightly_client.py

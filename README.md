@@ -127,19 +127,24 @@ python -m pytest -q tests      # or: python tests/test_expected_results.py
   **Reset demo** deletes the user's restaurant and files and reseeds.
 - **Supabase Storage**: private bucket `invoices`; the backend uploads files and hands the browser
   5-minute signed URLs.
-- **Nightly run**: `POST /api/nightly-run` with header `X-Cron-Secret`, called by
-  `.github/workflows/nightly.yml` at 11:40 PM New York time. It runs every restaurant; invoices already
-  counted are skipped as duplicates (the demo inbox is the same file set every night).
+- **Nightly run**: `POST /api/nightly-run` with headers `X-Cron-Secret` and `X-Run-Key`, called by
+  `.github/workflows/nightly.yml` (via `scripts/nightly_client.py`) at 3:30 AM New York time. It runs every
+  restaurant; invoices already counted are skipped as duplicates (the demo inbox is the same file set every
+  night). Setup, secrets, testing and Supabase checks: [`docs/nightly-run.md`](docs/nightly-run.md).
 - **Without Supabase variables** the app runs in local demo mode (no sign-in, in-memory sandboxes).
 - **Cost protection**: demo invoices never call the AI (matched by file hash); new uploads are images or
   PDF, at most 5 MB, at most 10 AI readings per IP per hour.
 
 ## Overnight scheduling (what actually exists)
 
-- **Production:** `.github/workflows/nightly.yml` calls `POST /api/nightly-run` (header `X-Cron-Secret`)
-  at 11:40 PM New York time, for every restaurant. It only runs once the repo secrets `NIGHTSHIFT_URL`
-  and `CRON_SECRET` are set; it can also be started by hand (Actions → "Nightly run" → Run workflow).
-  It re-reads the same demo inbox, so already-counted invoices are skipped as duplicates.
+- **Production:** `.github/workflows/nightly.yml` calls `POST /api/nightly-run` at **3:30 AM New York
+  time** for every restaurant (two UTC schedules, one per daylight-saving offset; exactly one runs). It needs
+  the repo secrets `NIGHTSHIFT_URL` and `CRON_SECRET`; it can also be started by hand (Actions → "Nightly
+  run" → Run workflow). One run at a time (workflow concurrency group + a server-side lock), and a run key per
+  New York date, so a retry or second trigger that night reports the earlier counts instead of running
+  again. A failed restaurant or unreadable invoice fails the job. It logs counts only (invoices processed,
+  duplicates skipped, review holds, errors), never invoice contents. It never runs **Review my options** or
+  **Investigate this alert** and never approves anything. Details: [`docs/nightly-run.md`](docs/nightly-run.md).
 - **Demo / local mode:** there is no background scheduler. The owner (or presenter) presses
   **Run Night Shift on tonight's inbox**; the log uses a fixed overnight clock (11:38 PM–6:55 AM) so every
   demo reads the same.
@@ -202,6 +207,7 @@ from a displayed total by 1¢ (noted in the UI). This matches `expected_results.
 | `demo-data/test-invoices/` | Fictional sample invoice to upload (PNG + a generated phone photo), served at `/samples/`. |
 | `tests/` | Checks against `expected_results.json`; options, labels and the AI review with a stubbed provider. |
 | `docs/decision-review-eval.md` | Manual evaluation cases for the live AI review. |
+| `.github/workflows/nightly.yml`, `scripts/nightly_client.py` | The 3:30 AM New York scheduled run: wakes Render, calls `/api/nightly-run` with a per-night run key, prints a counts-only summary, fails the job on errors. See `docs/nightly-run.md`. |
 | `Dockerfile` | Stage 1 builds `web/` with Node; stage 2 runs it all on slim Python. |
 
 ## How this was built
@@ -217,16 +223,16 @@ product, reviewed the output, and tested the app; the AI wrote much of the code 
 - The AI review's guards check structure, references and figures, not that every sentence is right.
   Reviews are cached in memory (lost on restart); the owner's limit and note are not saved.
 - "Before" is the price before the latest run; a decision made against an older baseline is not re-based.
+- The AI figure check covers `$` amounts and percentages; a bare number in AI text (e.g. "16.49") is not
+  checked. Seen in the live smoke test: the investigator wrote "16.49" and "6.34", which did match the calculator.
+- Percentages display to one decimal, so a scenario just under the target can show "38%" next to
+  "Below your 38% target" (e.g. 37.98%). The status uses the exact value.
 
 ## Setup checklist
 
 ### 1. Supabase dashboard
 1. **Create a project** (supabase.com → New project). Save the database password somewhere safe.
 2. **Run the migrations**, in order: either `supabase link --project-ref <ref>` then `supabase db push`,
-- The AI figure check covers `$` amounts and percentages; a bare number in AI text (e.g. "16.49") is not
-  checked. Seen in the live smoke test: the investigator wrote "16.49" and "6.34", which did match the calculator.
-- Percentages display to one decimal, so a scenario just under the target can show "38%" next to
-  "Below your 38% target" (e.g. 37.98%). The status uses the exact value.
    or SQL Editor → paste and run each file in `supabase/migrations/` in filename order
    (`…001_schema`, `…002_functions`, `…003_seed_demo_template`, `…004_storage`).
 3. **Check the result**: Table Editor shows 11 tables, each marked "RLS enabled" with no policies;
@@ -263,7 +269,8 @@ Health check path `/api/health`, start command blank (the Dockerfile reads `$POR
 | `NIGHTSHIFT_URL` | your Render URL, e.g. `https://night-shift-r237.onrender.com` (no trailing slash) |
 | `CRON_SECRET` | the **same** value as on Render |
 
-Then Actions → "Nightly run" → **Run workflow** once to test it.
+Then Actions → "Nightly run" → **Run workflow** once to test it (full checklist and Supabase queries:
+[`docs/nightly-run.md`](docs/nightly-run.md)).
 
 ## Tests
 

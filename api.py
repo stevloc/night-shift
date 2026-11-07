@@ -231,37 +231,83 @@ def public_config():
             "emailSignin": CONFIG.email_signin}
 
 
+NIGHTLY_LOCK = asyncio.Lock()   # one scheduled run at a time (per process; Render runs one)
+RUN_KEY = re.compile(r"^[A-Za-z0-9._:-]{1,64}$")
+SUMMARY_COUNTS = ("invoices_processed", "duplicates_skipped", "possible_corrections", "review_holds", "errors")
+
+
+def _nightly_one(state, run_key):
+    """Run one restaurant's night (worker thread). Returns (summary, ran)."""
+    token = engine.use_session(state)
+    try:
+        done = engine.completed_run(run_key) if run_key else None
+        if done is not None:   # retry / second trigger for the same night: report it, don't redo it
+            return done, False
+        return engine.summarize_run(engine.run_night_shift(False, run_key=run_key)), True
+    finally:
+        engine._current.reset(token)
+
+
 @app.post("/api/nightly-run")
 async def nightly_run(request: Request):
-    """Scheduled run for every restaurant. Requires header X-Cron-Secret == CRON_SECRET."""
+    """Scheduled run for every restaurant (called by .github/workflows/nightly.yml).
+
+    Headers: X-Cron-Secret == CRON_SECRET (required); X-Run-Key (optional, e.g. "nightly-2026-11-08"):
+    a restaurant that already completed a run with this key is skipped and its earlier counts are
+    reported, so retries and repeated triggers never re-run a night. Invoices themselves are never
+    counted twice either way (supplier + number + contents fingerprint).
+    Response: counts only. 200 when every restaurant succeeded, 500 if any failed or any invoice
+    could not be processed, 409 if a scheduled run is already in progress, 403 bad secret.
+    Never triggers the AI decision review or the investigator.
+    """
     given = request.headers.get("x-cron-secret", "")
     if not CONFIG.cron_secret or not hmac.compare_digest(given.encode(), CONFIG.cron_secret.encode()):
         raise HTTPException(403, detail={"error": "forbidden"})
-    results = []
-    if STORE is None:   # local mode: every in-memory sandbox
-        for item in list(engine.SESSIONS._items.values()):
-            token = engine.use_session(item["state"])
-            try:
-                await run_in_threadpool(engine.run_night_shift, False)
-            finally:
-                engine._current.reset(token)
-            results.append({"ok": True})
-        return {"ok": True, "restaurants": len(results)}
-    for restaurant_id in await STORE.all_restaurants():
-        async with LOCKS.setdefault(restaurant_id, asyncio.Lock()):
-            try:
-                state, meta = await STORE.load(restaurant_id)
-                state["actor"] = None
-                token = engine.use_session(state)
-                try:
-                    await run_in_threadpool(engine.run_night_shift, False)
-                    await STORE.save(restaurant_id, state, meta)
-                finally:
-                    engine._current.reset(token)
-                results.append({"restaurant_id": restaurant_id, "ok": True})
-            except Exception as error:   # one bad restaurant must not stop the others
-                results.append({"restaurant_id": restaurant_id, "ok": False, "error": type(error).__name__})
-    return {"ok": all(r["ok"] for r in results), "restaurants": len(results), "results": results}
+    run_key = request.headers.get("x-run-key", "").strip() or None
+    if run_key and not RUN_KEY.match(run_key):
+        raise HTTPException(400, detail={"error": "invalid_run_key"})
+    if NIGHTLY_LOCK.locked():
+        return JSONResponse(status_code=409, content={"ok": False, "error": "already_running"})
+
+    async with NIGHTLY_LOCK:
+        started = engine._now()
+        results = []
+        if STORE is None:   # local mode: every in-memory sandbox
+            for sid, item in list(engine.SESSIONS._items.items()):
+                summary, ran = await run_in_threadpool(_nightly_one, item["state"], run_key)
+                results.append({"restaurant": sid[:6], "ok": not summary.get("errors"), "ran": ran, **summary})
+        else:
+            for restaurant_id in await STORE.all_restaurants():
+                async with LOCKS.setdefault(restaurant_id, asyncio.Lock()):
+                    try:
+                        state, meta = await STORE.load(restaurant_id)
+                        state["actor"] = None
+                        summary, ran = await run_in_threadpool(_nightly_one, state, run_key)
+                        if ran:
+                            await STORE.save(restaurant_id, state, meta)
+                        results.append({"restaurant": restaurant_id, "ok": not summary.get("errors"),
+                                        "ran": ran, **summary})
+                    except Exception as error:   # one bad restaurant must not stop the others
+                        results.append({"restaurant": restaurant_id, "ok": False, "ran": False,
+                                        "failure": type(error).__name__})
+        totals = {k: sum(r.get(k, 0) for r in results) for k in SUMMARY_COUNTS}
+        body = {
+            "ok": all(r["ok"] for r in results),
+            "run_key": run_key,
+            "started": started,
+            "completed": engine._now(),
+            "restaurants": len(results),
+            "restaurants_run": sum(1 for r in results if r["ran"]),
+            "restaurants_already_done": sum(1 for r in results if not r["ran"] and "failure" not in r),
+            "restaurants_failed": sum(1 for r in results if "failure" in r),
+            **totals,
+            "results": results,
+        }
+    print(f"nightly-run key={run_key} ok={body['ok']} restaurants={body['restaurants']} "
+          f"run={body['restaurants_run']} already_done={body['restaurants_already_done']} "
+          f"failed={body['restaurants_failed']} "
+          + " ".join(f"{k}={totals[k]}" for k in SUMMARY_COUNTS), flush=True)
+    return JSONResponse(status_code=200 if body["ok"] else 500, content=body)
 
 
 @app.get("/api/state")
