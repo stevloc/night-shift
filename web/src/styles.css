@@ -637,3 +637,10 @@ main { overflow-wrap: anywhere; }
 .evidence-links a { font-weight: 600; }
 .tag { display: inline-block; margin-right: 6px; padding: 0 8px; border-radius: 999px; font-size: 0.78rem; font-weight: 700;
   background: var(--warn-soft); color: var(--text); }
+
+/* ------------------------------------------------------------ investigation activity (only checks that ran) */
+.activity-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 0.92rem; }
+.activity-list li { display: flex; gap: 8px; align-items: flex-start; }
+.activity-list svg { margin-top: 3px; flex: none; color: var(--success); }
+.activity-list .st-held svg, .activity-list .st-missing svg { color: var(--warn); }
+.activity-list .st-error svg { color: var(--danger); }

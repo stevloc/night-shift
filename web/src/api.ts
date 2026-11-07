@@ -289,6 +289,48 @@ export interface ReviewResult {
 
 export interface Limits { max_price: string; max_increase: string }
 
+// ---------------------------------------------------------------- "Investigate this alert"
+
+export type InvestigationTool = "get_invoice_evidence" | "get_ingredient_cost_history" | "get_dish_context" | "calculate_price_scenario";
+
+/** One tool execution that actually happened (never a reconstructed or fictional step). */
+export interface InvestigationEvent {
+  tool: InvestigationTool;
+  status: "ok" | "held" | "missing" | "error";
+  ingredient?: string | null;
+  dish?: string | null;
+  price?: number | null;
+  ref?: string | null;
+}
+
+/** A price scenario exactly as Night Shift's calculator returned it. */
+export interface CalculatedScenario {
+  ref: string; dish_id: string; price: number; current_price: number; left_per_order: number; share_left_pct: number;
+  reaches_target: boolean; target_pct: number; change_per_order_vs_today: number;
+  monthly_change_if_orders_unchanged: number | null; order_decline_that_erases_gain_pct: number | null;
+}
+
+export interface InvestigationResult {
+  snapshot: Snapshot;
+  status: "ok" | "stale" | "unavailable";
+  reason?: "ai_not_configured" | "rate_limited" | "tools_unsupported" | "timeout" | "deadline" | "provider_error"
+    | "invalid_output" | "incomplete";
+  retry_minutes?: number;
+  finding?: {
+    outcome: "ready_for_review" | "needs_confirmation" | "unavailable";
+    summary: string; evidence_refs: string[]; scenario_ids: string[]; uncertainty: string[];
+    question: string | null; next_step: string | null;
+  } | null;
+  events: InvestigationEvent[];
+  refs?: Record<string, { kind: "invoice" | "history" | "saved_price" | "dish" | "sales" | "scenario";
+    invoice_no?: string; ingredient?: string; date?: string; dish?: string }>;
+  scenarios?: CalculatedScenario[];
+  turns?: number; tool_executions?: number; elapsed_seconds?: number;
+  /** How the invoice readings it used were produced: "saved" (replayed) and/or "ai" (read when they arrived). */
+  readings?: ("saved" | "ai")[];
+  model?: string;
+}
+
 /** A validation error from the server: codes the UI translates. */
 export class ApiError extends Error {
   constructor(public detail: { error: string; fields?: Record<string, string>; min?: number; max?: number; retry_minutes?: number },
@@ -393,6 +435,10 @@ export const api = {
   /** One AI decision review. Read-only on the server. */
   review: (dish: string, body: Limits & { note: string; snapshot_version: string; lang: Lang }) =>
     request<ReviewResult>(`/api/dishes/${dish}/review`, send("POST", {
+      ...body, max_price: body.max_price.trim() || null, max_increase: body.max_increase.trim() || null })),
+  /** One bounded AI investigation (read-only on the server). */
+  investigate: (dish: string, body: Limits & { note: string; snapshot_version?: string; lang: Lang }) =>
+    request<InvestigationResult>(`/api/dishes/${dish}/investigate`, send("POST", {
       ...body, max_price: body.max_price.trim() || null, max_increase: body.max_increase.trim() || null })),
   restore: (dish: string) => request<WithView>(`/api/dishes/${dish}/restore`, send("POST")),
   saveSettings: (settings: Record<string, unknown>) => request<WithView>("/api/settings", send("PUT", settings)),

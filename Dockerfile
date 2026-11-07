@@ -18,7 +18,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY api.py auth.py config.py data.py engine.py llm.py margins.py options.py review.py store.py ./
+COPY api.py auth.py config.py data.py engine.py llm.py margins.py investigate.py options.py review.py store.py ./
 COPY demo-data/ ./demo-data/
 COPY --from=web /web/dist ./web/dist
 

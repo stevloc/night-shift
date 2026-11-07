@@ -27,13 +27,15 @@ Labor and overhead are not included in any figure (the app says so).
 
 ## Where AI is used (and where it isn't)
 
-There are **two** AI calls, both through OpenRouter with the same key (`OPENROUTER_API_KEY`) and model
-(`OPENROUTER_MODEL`, default `anthropic/claude-sonnet-5.5`). There are no agents, no loops, no background calls.
+Three AI features, all through OpenRouter with the same key (`OPENROUTER_API_KEY`) and model
+(`OPENROUTER_MODEL`, default `anthropic/claude-sonnet-5.5`). One of them is a single bounded tool-using
+investigator; nothing runs in the background, and there are no other agents.
 
 | Call | When | Purpose | Cached | If unavailable |
 |---|---|---|---|---|
 | `llm.extract_invoice()` | A **new** invoice image/PDF is uploaded (`engine.process_invoice`) | Read supplier, number, date, total and each line into JSON | On disk (`llm_cache.json`) by file hash; demo invoices never call it | Friendly error; nothing is counted |
-| `llm.review_decision()` | The owner presses **Get an AI decision review** | Explain the options the code calculated, against the owner's limit and note | In memory, per restaurant/session, keyed by snapshot version + owner input + language + model + prompt version | "AI review isn't available"; the full comparison and all buttons keep working |
+| `llm.review_decision()` | API only (`POST /api/dishes/{id}/review`); the UI now uses the investigator below | Explain the options the code calculated, against the owner's limit and note | In memory, per restaurant/session | Unavailable state; comparison unchanged |
+| `investigate.run()` via `llm.chat_turn()` | The owner presses **Investigate this alert** | Let the model choose which evidence to inspect through 4 read-only tools, then return a validated finding | Not cached (each run is live) | "Investigation isn't available" + reason; everything else keeps working |
 
 **Deterministic code, always:** matching invoice lines, parsing pack sizes, unit costs and yields, totals
 and duplicate checks, holds, every dish calculation, statuses, the suggested price, the option comparison,
@@ -54,6 +56,26 @@ order-volume what-ifs, monthly effects, the report, and every saved owner decisi
 - Limits: 25 s timeout, 900 output tokens, no retries, 10 reviews per IP per hour (a separate bucket from
   the 10 invoice readings per IP per hour, which are unchanged).
 - Validation checks references, not truth. Manual evaluation cases: `docs/decision-review-eval.md`.
+
+**Investigate this alert** (`investigate.py`). The model starts with only the alert id and a one-line
+summary, then decides which of these tools to call (thin read-only wrappers over existing code):
+
+| Tool | Returns |
+|---|---|
+| `get_invoice_evidence(ingredient)` | Invoice lines: supplier, number, date, printed line, extracted pack/price, accepted / held (with reasons) / not counted, and whether the reading was a saved replay |
+| `get_ingredient_cost_history(ingredient)` | Cost in use now, cost before tonight's run, earlier accepted invoices, last dated deliveries (pack size from the ingredient list, said so), normalized cost per unit; held lines excluded and counted |
+| `get_dish_context(dish_id)` | Recipe amounts and yields, current DoorDash price, target definition, fee, packaging, amount left now, holds, this dish's DoorDash orders (restaurant total orders: not in the data) |
+| `calculate_price_scenario(dish_id, price)` | The existing calculator for one price; costs, yields, fees, target and order volume come from the app. Refused while the dish is held |
+
+Limits: 4 model turns (the last with tools disabled), 6 tool executions, 45 s overall, per-request
+timeouts inside that deadline, no retries, repeated identical calls never re-run (env:
+`INVESTIGATE_MAX_TURNS`, `INVESTIGATE_MAX_TOOLS`, `INVESTIGATE_DEADLINE_SECONDS`). Before the first call the
+server checks OpenRouter's model list for tool support and says "unavailable" if the model can't use tools.
+Tools run on a private copy of the restaurant's state, so an investigation cannot change anything.
+The finding (`ready_for_review` / `needs_confirmation` / `unavailable`) is rejected unless every
+reference and scenario id came from this run's tool results, every $ or % appears in a tool result, a
+held dish is never "ready", and a confirmation has a question. The UI lists only the checks that ran.
+Without a key, nothing is called and no activity is shown. There is no recorded or replayed investigation.
 
 **Provenance shown in the app:** invoices say "Read by AI just now" or "Replayed from saved reading";
 reviews say "Generated just now · model" or "Saved review from <time>". These are independent: a
@@ -133,9 +155,9 @@ the NB-7731 photo and writes the review live; without it, steps 1:00 and 3:00 sh
 | 1:00 | Invoice Review → upload `test_invoice_northbank_NB-7731.png` (fresh invoice) | "Read by AI just now"; 2 × 20 lb at $140 = $280 matches the total; $7.00/lb, $10.00 usable/lb at 70% yield |
 | 1:40 | Morning Brief → Brisket Pho | **What changed**: $119.80 → $140.00 per 20 lb (↑ 16.9% vs. before tonight's run), current from NB-7731; RM-20419 $134.20 shown as historical. Left per order $6.36 → $5.84 (36.5%, target 38%) |
 | 2:20 | **Review my options** → largest increase `0.50`, note "I can raise the price by at most fifty cents, and I want to preserve the portion." | Option cards: keep $15.99 (36.5%), suggested $16.99 (38.8%, above your limit), your limit $16.49 (37.7%, below target); conflict notice; what-if table (orders unchanged / 5% / 10% fewer) and "about 6% fewer orders would erase the improvement", labelled hypothetical |
-| 3:00 | **Get an AI decision review** | Suggested option with figures from code, cost / customer / data points each linked to evidence, "You said" on the note, one question. Point out: "This review changed nothing." (No key → the unavailable message; the comparison stays.) |
+| 3:00 | **Investigate this alert** | The checks it actually ran (e.g. compared accepted brisket purchases, checked the recipe, calculated a scenario), a "Ready for your review" finding with links to the invoice and recipe, scenario figures from the calculator. "This investigation changed nothing." (No key → the unavailable message; the comparison stays.) |
 | 3:40 | **Change price** → 16.49 → **Approve your price** | Labelled "Your price scenario … below your target (37.7%)"; decision log card; "Update this price in DoorDash Merchant Portal" (the real next step; Night Shift never publishes) |
-| 4:15 | Spring Rolls (missing rice-paper pack size) | Hold + previous cost disclosed; "Options wait for your confirmation"; no AI pricing review. Invoice Review → fix line → 10 packs × 50 sheets → Spring Rolls back to OK |
+| 4:15 | Spring Rolls (missing rice-paper pack size) → **Investigate this alert** | Hold + previous cost disclosed; the investigation opens LP-5521, compares accepted rice-paper purchases, and asks one question ("Needs your confirmation"); the hold stays. Invoice Review → fix line → 10 packs × 50 sheets → Spring Rolls back to OK |
 | 4:45 | Refresh the page | Decision and log are still there; switch to **Español** to show the same flow |
 
 ## How the math works (`margins.py`)
@@ -163,6 +185,7 @@ from a displayed total by 1¢ (noted in the UI). This matches `expected_results.
 | `engine.py` | Invoice checks, holds, corrections, cost records, scenarios, decision log, report, sessions, rate limit. |
 | `options.py` | The decision snapshot: options with stable ids, order-volume what-ifs, evidence registry, allowed actions. No AI. |
 | `review.py` | AI decision review: prompt, strict validation, scoped cache, its own rate limit. |
+| `investigate.py` | "Investigate this alert": 4 read-only tools, the bounded tool loop, finding validation. |
 | `api.py` | FastAPI: `/api/*` + the built app; auth middleware; upload guards; `/api/health`, `/api/config`, `/api/nightly-run`. |
 | `config.py` | Reads the six environment variables (secrets are never printed). |
 | `auth.py` | Verifies Supabase access tokens (JWKS; legacy HS256 via Supabase Auth). |
