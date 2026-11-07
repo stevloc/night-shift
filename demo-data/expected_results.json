@@ -1,0 +1,68 @@
+{
+  "settings": {
+    "doordash_commission_pct": 25,
+    "packaging_per_delivery_order": 0.5,
+    "target_delivery_margin_pct": 38,
+    "currency": "USD",
+    "note": "Margin = price - ingredient cost - packaging - DoorDash commission. Labor and overhead excluded."
+  },
+  "results": [
+    {
+      "dish": "Brisket Pho",
+      "doordash_price": 15.99,
+      "cost_before": 5.14,
+      "cost_after": 5.51,
+      "left_per_order": 5.99,
+      "margin_pct": 37.4,
+      "status": "Below your target margin",
+      "forecast_monthly_orders": 225,
+      "proposal": {
+        "new_doordash_price": 16.99,
+        "left_per_order": 6.74,
+        "margin_pct": 39.7,
+        "gain_per_order": 0.75,
+        "gain_per_month": 168.75
+      }
+    },
+    {
+      "dish": "Chicken Pho",
+      "doordash_price": 14.99,
+      "cost_before": 2.86,
+      "cost_after": 2.87,
+      "left_per_order": 7.88,
+      "margin_pct": 52.5,
+      "status": "Cost increased; no action needed",
+      "forecast_monthly_orders": 157
+    },
+    {
+      "dish": "Banh Mi (grilled pork)",
+      "doordash_price": 11.49,
+      "cost_before": 1.77,
+      "cost_after": 1.77,
+      "left_per_order": 6.34,
+      "margin_pct": 55.2,
+      "status": "OK",
+      "forecast_monthly_orders": 136
+    },
+    {
+      "dish": "Bun Cha",
+      "doordash_price": 15.49,
+      "cost_before": 2.3,
+      "cost_after": 2.3,
+      "left_per_order": 8.82,
+      "margin_pct": 56.9,
+      "status": "OK",
+      "forecast_monthly_orders": 114
+    },
+    {
+      "dish": "Spring Rolls (2)",
+      "doordash_price": 7.99,
+      "cost_before": 1.72,
+      "cost_after": 1.72,
+      "left_per_order": 3.77,
+      "margin_pct": 47.2,
+      "status": "Needs review",
+      "forecast_monthly_orders": 185
+    }
+  ]
+}

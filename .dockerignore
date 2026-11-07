@@ -1,0 +1,15 @@
+.git
+.env
+.env.*
+!.env.example
+**/node_modules
+**/__pycache__
+web/dist
+docs
+tests
+*.zip
+llm_cache.json
+.DS_Store
+supabase
+scripts
+.github

@@ -1,108 +1,127 @@
-"""Margin math. Plain Python, no AI: every number the owner sees comes from here.
+"""All the math. Plain Python, no AI. Every number the owner sees comes from here.
 
-DoorDash margin = DoorDash price - 25% commission - $0.50 packaging - food cost
-In-store margin = in-store price - food cost
+    Estimated amount left (per DoorDash order)
+        = DoorDash price - ingredient cost - packaging - DoorDash commission
+    Labor and overhead are NOT included (the UI says so).
+
+    Margin = amount left / DoorDash price.
+    Math runs on exact values; amounts are rounded to the cent (half up) only for display.
+    So a displayed step can differ from the displayed total by 1 cent (the UI notes this).
+    Raising the price by $1 adds $1 x (1 - commission) to the amount left,
+    because the commission grows with the price ($0.75 at 25%).
 """
 
 import math
+from decimal import ROUND_HALF_UP, Decimal
 
-import pandas as pd
+from data import UNITS
 
-from data import DOORDASH_COMMISSION, PACKAGING_COST, MENU
-
-
-def dish_cost(recipe, prices):
-    """Food cost of one serving: sum of (amount x unit price) over the recipe."""
-    return sum(amount * prices[ingredient] for ingredient, amount in recipe.items())
-
-
-def doordash_margin(doordash_price, food_cost):
-    """What the restaurant keeps per DoorDash order."""
-    commission = doordash_price * DOORDASH_COMMISSION
-    return doordash_price - commission - PACKAGING_COST - food_cost
+LOSES = "loses_money"
+BELOW_TARGET = "below_target"
+COST_UP_OK = "cost_up_ok"
+OK = "ok"
 
 
-def break_even_doordash_price(food_cost):
-    """Lowest DoorDash price where margin is $0 (solves doordash_margin = 0)."""
-    return (food_cost + PACKAGING_COST) / (1 - DOORDASH_COMMISSION)
+def cents(x):
+    """Round money half-up to cents ($1.625 -> $1.63), like a cash register."""
+    return float(Decimal(str(x)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 
-def compute_margins(prices, menu=MENU):
-    """Returns (DataFrame of every dish, list of dishes losing money on DoorDash)."""
-    rows = []
-    for dish, info in menu.items():
-        cost = dish_cost(info["recipe"], prices)
-        rows.append({
-            "Dish": dish,
-            "Food cost": round(cost, 2),
-            "In-store price": info["in_store_price"],
-            "In-store margin": round(info["in_store_price"] - cost, 2),
-            "DoorDash price": info["doordash_price"],
-            "DoorDash margin": round(doordash_margin(info["doordash_price"], cost), 2),
-        })
-    df = pd.DataFrame(rows)
-
-    flagged = []
-    for row in df[df["DoorDash margin"] < 0].to_dict("records"):
-        flagged.append({
-            "dish": row["Dish"],
-            "food_cost": row["Food cost"],
-            "in_store_price": row["In-store price"],
-            "in_store_margin": row["In-store margin"],
-            "doordash_price": row["DoorDash price"],
-            "doordash_margin": row["DoorDash margin"],
-            "loss_per_order": -row["DoorDash margin"],
-            "break_even_doordash_price": round(break_even_doordash_price(row["Food cost"]), 2),
-            "recipe": menu[row["Dish"]]["recipe"],
-        })
-    return df, flagged
+def to_base(amount, unit):
+    """Convert an amount to its base unit (grams or each)."""
+    base, factor = UNITS[unit]
+    return amount * factor, base
 
 
-def evaluate_fix(fix, dish, prices, menu=MENU):
-    """Compute the new DoorDash margin for an AI-proposed fix.
+def same_dimension(unit_a, unit_b):
+    return unit_a in UNITS and unit_b in UNITS and UNITS[unit_a][0] == UNITS[unit_b][0]
 
-    The AI only proposes *what* to change (a price, a combo partner, a portion %).
-    This function does the arithmetic. Returns the new margin in dollars, or
-    None if the proposal can't be evaluated (bad input from the model).
+
+def unit_costs(item):
+    """Cost per purchase unit, and per usable purchase unit after yield.
+
+    item: {"pack_size", "pack_unit", "pack_price", "yield_pct"}
     """
-    info = menu[dish]
-    cost = dish_cost(info["recipe"], prices)
-    kind = fix.get("type")
-
-    try:
-        if kind == "raise_price":
-            return doordash_margin(float(fix["new_doordash_price"]), cost)
-
-        if kind == "combo":
-            # One order, one packaging fee, two items' food cost.
-            partner = menu[fix["add_item"]]
-            combo_cost = cost + dish_cost(partner["recipe"], prices)
-            return doordash_margin(float(fix["combo_doordash_price"]), combo_cost)
-
-        if kind == "smaller_portion":
-            # Scale one ingredient (usually the protein) for delivery orders only.
-            ingredient = fix["ingredient"]
-            pct = float(fix["portion_pct"]) / 100
-            if ingredient not in info["recipe"] or not 0 < pct <= 1:
-                return None
-            smaller = dict(info["recipe"], **{ingredient: info["recipe"][ingredient] * pct})
-            return doordash_margin(info["doordash_price"], dish_cost(smaller, prices))
-    except (KeyError, TypeError, ValueError):
-        return None
-    return None
+    per_unit = item["pack_price"] / item["pack_size"]
+    usable = per_unit / (item["yield_pct"] / 100)
+    return per_unit, usable
 
 
-def price_change(fix, dish, menu=MENU):
-    """How much the customer-facing DoorDash price goes up (used by the trust ladder)."""
-    if fix.get("type") == "raise_price":
-        return float(fix["new_doordash_price"]) - menu[dish]["doordash_price"]
-    return 0.0
+def serving_cost(item, amount, unit):
+    """Cost of `amount unit` of an ingredient, after yield."""
+    pack_base, _ = to_base(item["pack_size"], item["pack_unit"])
+    need_base, _ = to_base(amount, unit)
+    cost_per_base = item["pack_price"] / pack_base / (item["yield_pct"] / 100)
+    return need_base * cost_per_base
 
 
-def round_up_to_menu_price(amount):
-    """Round up to the next .49 or .99, the way menus are priced."""
-    whole = math.floor(amount)
-    for candidate in (whole + 0.49, whole + 0.99, whole + 1.49):
-        if candidate >= amount:
-            return round(candidate, 2)
-    return round(whole + 1.99, 2)
+def ingredient_lines(recipe, prices):
+    """Per-ingredient cost breakdown for one serving (for the Dish Detail table)."""
+    lines = []
+    for key, (amount, unit) in recipe.items():
+        item = prices[key]
+        per_unit, usable = unit_costs(item)
+        lines.append({
+            "ingredient": key,
+            "pack_size": item["pack_size"], "pack_unit": item["pack_unit"], "pack_price": item["pack_price"],
+            "cost_per_unit": round(per_unit, 4), "yield_pct": item["yield_pct"],
+            "usable_cost_per_unit": round(usable, 4),
+            "amount": amount, "unit": unit,
+            "cost_exact": serving_cost(item, amount, unit),
+            "cost": cents(serving_cost(item, amount, unit)),
+        })
+    return lines
+
+
+def food_cost(lines):
+    """Exact ingredient cost per serving (sum of exact line costs)."""
+    return sum(line["cost_exact"] for line in lines)
+
+
+def breakdown(price, food, settings):
+    """One DoorDash order step by step: exact math, cents for display, margin from the exact amount left."""
+    commission = price * settings["commission_pct"] / 100
+    left = price - food - settings["packaging"] - commission
+    return {
+        "price": cents(price),
+        "commission": cents(commission),
+        "packaging": cents(settings["packaging"]),
+        "food_cost": cents(food),
+        "left": cents(left),
+        "left_exact": left,
+        "margin_pct": round(left / price * 100, 1) if price else 0.0,
+        "margin_exact": left / price * 100 if price else 0.0,
+    }
+
+
+def status(left, margin_pct, target_pct, cost_went_up):
+    if left < 0:
+        return LOSES
+    if margin_pct < target_pct:
+        return BELOW_TARGET
+    if cost_went_up:
+        return COST_UP_OK
+    return OK
+
+
+def proposed_price(current_price, food, settings):
+    """Smallest whole-dollar DoorDash price increase that gets back to the target margin.
+
+    Solve  (p*(1-c) - food - packaging) / p >= target   ->   p >= (food + packaging) / (1 - c - target)
+    """
+    c = settings["commission_pct"] / 100
+    t = settings["target_margin_pct"] / 100
+    if 1 - c - t <= 0:
+        return None  # target is impossible at this commission
+    needed = (food + settings["packaging"]) / (1 - c - t)
+    # Whole-dollar steps keep menu endings (.95 stays .95). Check with the rounded breakdown too.
+    steps = max(1, math.ceil(round(needed - current_price, 6)))
+    price = round(current_price + steps, 2)
+    while breakdown(price, food, settings)["margin_exact"] < settings["target_margin_pct"]:
+        price = round(price + 1, 2)
+    return price
+
+
+def monthly(per_order, orders):
+    """Monthly effect, estimated at the owner's current order volume."""
+    return per_order * orders

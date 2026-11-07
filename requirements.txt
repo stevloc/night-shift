@@ -1,4 +1,9 @@
-streamlit>=1.40
-openai>=1.40
-pandas>=2.0
-pillow>=10.1
+# Tested versions (pinned so the Render build matches what was tested).
+fastapi==0.162.2
+uvicorn[standard]==0.40.0
+python-multipart==0.0.32
+openai==3.46.0
+pillow==12.3.0
+httpx==0.28.1
+pyjwt[crypto]==2.13.0
+tzdata==2026.6
