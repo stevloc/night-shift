@@ -29,7 +29,8 @@ export function WhileYouSlept() {
       <Group id="g-proposed" tone="accent" icon="dollar" title={t("g_proposed")} count={proposed.length} empty={t("g_proposed_empty")}>
         {proposed.map((item, i) => <ProposedItem key={i} item={item} />)}
       </Group>
-      <Group id="g-verified" tone="good" icon="checkCircle" title={t("g_verified")} count={verified.length} empty={t("g_verified_empty")}>
+      <Group id="g-verified" tone="good" icon="checkCircle" title={t("g_verified")} count={verified.length} empty={t("g_verified_empty")}
+        collapsed={t("g_verified_show", { count: num(verified.length) })}>
         {verified.map((item, i) => <VerifiedItem key={i} item={item} />)}
       </Group>
 
@@ -48,14 +49,18 @@ export function WhileYouSlept() {
   );
 }
 
-function Group({ id, tone, icon, title, count, empty, children }: {
-  id: string; tone: string; icon: IconName; title: string; count: number; empty: string; children: ReactNode;
+function Group({ id, tone, icon, title, count, empty, collapsed, children }: {
+  id: string; tone: string; icon: IconName; title: string; count: number; empty: string;
+  /** Summary text: the list starts closed (every check keeps its evidence, one tap away). */
+  collapsed?: string; children: ReactNode;
 }) {
   const { i18n } = useApp();
+  const list = <ul className="wys-list">{children}</ul>;
   return (
     <section className={`wys-group ${tone}`} aria-labelledby={id}>
       <h3 id={id}><Icon name={icon} size={20} />{title} <span className="count">({i18n.num(count)})</span></h3>
-      {count === 0 ? <p className="hint">{empty}</p> : <ul className="wys-list">{children}</ul>}
+      {count === 0 ? <p className="hint">{empty}</p>
+        : collapsed ? <details className="more"><summary>{collapsed}</summary>{list}</details> : list}
     </section>
   );
 }

@@ -656,3 +656,9 @@ main { overflow-wrap: anywhere; }
 .sample-invoices ul { list-style: none; margin: 4px 0 0; padding: 0; }
 .sample-invoices a { display: inline-flex; gap: 6px; align-items: center; min-height: 44px; font-weight: 700; }
 label.btn:focus-within { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+/* ------------------------------------------------------------ collapsed detail ("Show all … checks") */
+details.more > summary { min-height: 44px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  font-weight: 700; color: var(--accent-text); text-decoration: underline; text-underline-offset: 3px; }
+details.more > summary:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+details.more[open] > summary { margin-bottom: 10px; }

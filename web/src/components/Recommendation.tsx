@@ -14,7 +14,7 @@ import {
 import { Dialog } from "./Dialog";
 import { Icon } from "./Icon";
 import { AuthImage } from "./AuthImage";
-import { CostChangeLine, EarlierInvoices } from "./CostChange";
+import { CostChangeLine } from "./CostChange";
 import { Num } from "./Num";
 import { OptionsReview } from "./OptionsReview";
 
@@ -100,7 +100,6 @@ export function RecommendationCard({ dish }: { dish: Dish }) {
           <span><CostChangeLine change={change} /></span>
         </p>
       )}
-      {change && <EarlierInvoices change={change} />}
 
       <section className="rec-block" aria-labelledby={`${headingId}-effect`}>
         <h4 id={`${headingId}-effect`}>{t("financial_effect")}</h4>
@@ -156,9 +155,8 @@ export function RecommendationCard({ dish }: { dish: Dish }) {
               <li><Icon name="clock" size={18} /><span>{rich("scenario_monthly", {
                 monthly: <Num source={monthlySource(p.per_order_change, dish, i18n)}><strong>{approx(p.monthly_change)}</strong></Num> })}</span></li>
             </ul>
-            <p className="hint">{rich("scenario_label", {
+            <p className="hint">{rich("scenario_assumes", {
               orders: <Num source={ordersSource(dish, i18n)}>{i18n.num(dish.monthly_orders)}</Num> })}</p>
-            <p className="hint row"><Icon name="info" size={16} />{t("demand_note")}</p>
             {p.edited && <p className="hint">{t("edited_note", { suggested: money(p.suggested) })}</p>}
             {p.reaches_target
               ? <p className="text-good row" style={{ gap: 8 }}><Icon name="checkCircle" />{t("scenario_reaches", { target: pctPoints(p.target_pct) })}</p>

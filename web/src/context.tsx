@@ -33,7 +33,12 @@ export function useApp(): AppCtx {
 
 /** Move focus to an element by id after React has rendered it. */
 export function focusLater(id: string) {
-  requestAnimationFrame(() => requestAnimationFrame(() => document.getElementById(id)?.focus()));
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    const el = document.getElementById(id);
+    // A target inside a closed <details> (e.g. a just-fixed invoice line) can't take focus: open it first.
+    for (let d = el?.closest("details"); d; d = d.parentElement?.closest("details") ?? null) d.open = true;
+    el?.focus();
+  }));
 }
 
 /** True while a CSS media query matches (e.g. landscape tablet). Updates on rotate/resize. */

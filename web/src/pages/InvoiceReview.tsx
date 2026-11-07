@@ -139,11 +139,22 @@ function InvoiceCard({ invoice }: { invoice: Invoice }) {
           total: invoice.total == null ? "—" : <Num source={totalSource}>{money(invoice.total)}</Num>,
         })}</span>
       </p>
-      <ol className="line-list" aria-label={t("inv_lines")}>
-        {/* Lines needing review first: that's where the owner's attention goes. */}
-        {[...invoice.lines].sort((a, b) => Number(b.status === "needs_review") - Number(a.status === "needs_review"))
-          .map((line) => <LineCard key={line.id} invoice={invoice} line={line} counted={counted} />)}
-      </ol>
+      {/* Lines needing review stay open: that's where the owner's attention goes. Verified lines are one tap away. */}
+      {invoice.lines.some((l) => l.status === "needs_review") && (
+        <ol className="line-list" aria-label={t("inv_lines_review")}>
+          {invoice.lines.filter((l) => l.status === "needs_review")
+            .map((line) => <LineCard key={line.id} invoice={invoice} line={line} counted={counted} />)}
+        </ol>
+      )}
+      {invoice.lines.some((l) => l.status !== "needs_review") && (
+        <details className="more">
+          <summary>{t("inv_show_verified", { count: num(invoice.lines.filter((l) => l.status !== "needs_review").length) })}</summary>
+          <ol className="line-list" aria-label={t("inv_lines")}>
+            {invoice.lines.filter((l) => l.status !== "needs_review")
+              .map((line) => <LineCard key={line.id} invoice={invoice} line={line} counted={counted} />)}
+          </ol>
+        </details>
+      )}
     </section>
   );
 }

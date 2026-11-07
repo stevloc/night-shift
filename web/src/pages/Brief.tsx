@@ -6,7 +6,7 @@ import { api, type Dish } from "../api";
 import { focusLater, useApp, useMediaQuery, type Route } from "../context";
 import { dishName, dishStatus, reasonText } from "../format";
 import { breakdownSources, targetSource } from "../sources";
-import { CostChangeLine, EarlierInvoices } from "../components/CostChange";
+import { CostChangeLine } from "../components/CostChange";
 import { Icon } from "../components/Icon";
 import { Num } from "../components/Num";
 import { HeldOptions } from "../components/OptionsReview";
@@ -98,10 +98,9 @@ export function Brief(_: { route: Route }) {
               {ran && view.dishes.some((d) => d.id === "brisket-pho")
                 ? <button type="button" className="btn-link" onClick={openBrisket}>{t("guide_step1")}</button>
                 : <span>{t("guide_step1")}</span>}
-              <span className="hint">{t("guide_step1_hint")}</span>
             </li>
-            <li><a href="#/invoices">{t("guide_step2")}</a><span className="hint">{t("guide_step2_hint")}</span></li>
-            <li><a href="#/invoices">{t("guide_step3")}</a><span className="hint">{t("guide_step3_hint")}</span></li>
+            <li><a href="#/invoices">{t("guide_step2")}</a></li>
+            <li><a href="#/invoices">{t("guide_step3")}</a></li>
           </ol>
         </section>
       )}
@@ -118,9 +117,8 @@ export function Brief(_: { route: Route }) {
                 <Icon name={c.pct > 0 ? "alert" : "down"} size={20} />
                 <div>
                   <p><CostChangeLine change={c} strong /></p>
-                  <p className="hint">{t("current_from", { no: c.current_source.invoice_no, date: i18n.day(c.current_source.date) })}</p>
-                  <EarlierInvoices change={c} />
-                  <p className="hint">{t("used_in", { dishes: i18n.list(c.dishes.map((d) => dishName(view, d, i18n))) })}</p>
+                  <p className="hint">{t("change_meta", { no: c.current_source.invoice_no,
+                    dishes: i18n.list(c.dishes.map((d) => dishName(view, d, i18n))) })}</p>
                 </div>
               </li>
             ))}

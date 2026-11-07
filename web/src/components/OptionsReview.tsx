@@ -87,7 +87,6 @@ export function OptionsReview({ dish }: { dish: Dish }) {
                   pct: i18n.pctPoints(c.best_margin), target: i18n.pctPoints(snap.settings.target_margin_pct) })}</p>
             ))}
             {shown && <SensitivityTable snap={snap} option={shown} options={priced} onPick={setFocus} />}
-            <p className="hint row"><Icon name="info" size={16} />{t("excluded")}</p>
 
             <Investigator dish={dish} limits={limits} note={note} version={snap.version} />
           </>
@@ -171,7 +170,6 @@ function SensitivityTable({ snap, option, options, onPick }: {
             </table>
           </div>
           <p>{thresholdText(s.threshold!, option, i18n)}</p>
-          <p className="hint">{t("rv_sens_basis", { orders: num(snap.monthly_orders), now: money(snap.now.left), after: money(option.after.left) })}</p>
         </>
       )}
       <p className="hint row"><Icon name="info" size={16} />{t("rv_sens_note")}</p>
