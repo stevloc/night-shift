@@ -66,6 +66,8 @@ def new_state(settings=None):
         "prices": prices,                         # current verified pack prices
         "baseline": copy.deepcopy(prices),        # before tonight ("before" column)
         "sources": _previous_sources(),           # where each current price came from
+        "baseline_sources": _previous_sources(),  # where each "before" price came from (the comparison)
+        "scope_id": secrets.token_urlsafe(12),    # cache scope for decision reviews (local mode; new on reset)
         "recipes": {d: {k: list(v) for k, v in info["recipe"].items()} for d, info in DISHES.items()},
         "settings": copy.deepcopy(settings or DEFAULT_SETTINGS),
         "invoices": [],
@@ -433,6 +435,7 @@ def run_night_shift(seeded_clock=True):
     STATE["run_id"] = str(uuid.uuid4())
     STATE["night_minutes"] = 0
     STATE["baseline"] = copy.deepcopy(STATE["prices"])   # "before" = prices before tonight
+    STATE["baseline_sources"] = copy.deepcopy(STATE["sources"])
     STATE["has_run"] = True
     clock = "night" if seeded_clock else None
     _log("shift_start", at=_night_time(0) if seeded_clock else None, files=len(INBOX_FILES))
@@ -628,6 +631,59 @@ def _log_dish_findings(clock):
         seen[dish_id] = finding
 
 
+# ------------------------------------------------------------------ cost records (one truth per ingredient)
+
+def _baseline_source(key):
+    return (STATE.get("baseline_sources") or {}).get(key) or _previous_sources()[key]
+
+
+def _line_source(invoice, line):
+    return {"kind": "owner" if line.get("corrected") else "invoice", "supplier": invoice["supplier"],
+            "invoice_no": invoice["invoice_no"], "date": invoice["date"], "invoice_id": invoice["id"],
+            "line_id": line["id"], "original": line["original"]}
+
+
+def _same_line(a, b):
+    return (a or {}).get("invoice_id") is not None and (a.get("invoice_id"), a.get("line_id")) == (
+        (b or {}).get("invoice_id"), (b or {}).get("line_id"))
+
+
+def _pack(p):
+    return {f: p[f] for f in ("pack_size", "pack_unit", "pack_price")}
+
+
+def cost_record(key):
+    """The cost a dish uses for one ingredient now, what it is compared with, and earlier invoices.
+
+    current     the verified pack price in use (STATE["prices"]) and the invoice line it came from
+    comparison  the price before tonight's run (STATE["baseline"]): the "before" column everywhere
+    earlier     other counted invoice lines for this ingredient: historical evidence, never "current"
+    """
+    current_source = STATE["sources"][key]
+    comparison_source = _baseline_source(key)
+    earlier = []
+    for inv in STATE["invoices"]:
+        if not _counted(inv):
+            continue
+        for line in inv["lines"]:
+            if line["ingredient"] != key or not line["applied"]:
+                continue
+            src = _line_source(inv, line)
+            if _same_line(src, current_source) or _same_line(src, comparison_source):
+                continue
+            earlier.append({**_pack(line), "source": src})
+    old, new = _per_base_cost(STATE["baseline"][key]), _per_base_cost(STATE["prices"][key])
+    return {
+        "ingredient": key,
+        "current": {**_pack(STATE["prices"][key]), "yield_pct": STATE["prices"][key]["yield_pct"],
+                    "source": current_source},
+        "comparison": {**_pack(STATE["baseline"][key]), "source": comparison_source,
+                       "basis": "before_run" if STATE["has_run"] else "saved_prices"},
+        "earlier": earlier[-3:],
+        "pct": round(new / old - 1, 4),
+    }
+
+
 # ------------------------------------------------------------------ dish math
 
 def _recipe_tuples(recipe):
@@ -654,6 +710,7 @@ def dish_view(dish_id, proposal_override=None, recipe_override=None):
         line["cost_before"] = old["cost"]
         line["pack_before"] = {f: old[f] for f in ("pack_size", "pack_unit", "pack_price")}
         line["source"] = STATE["sources"][line["ingredient"]]
+        line["source_before"] = _baseline_source(line["ingredient"])
         line["recipe_amount"] = DISHES[dish_id]["recipe"][line["ingredient"]][0]  # original recipe card
 
     # Held: the dish keeps using the last verified cost of each held ingredient until the owner confirms.
@@ -676,6 +733,7 @@ def dish_view(dish_id, proposal_override=None, recipe_override=None):
                 "after": after, "per_order_change": per_order,
                 "monthly_change": cents(monthly(per_order_exact, orders)),
                 "reaches_target": after["margin_exact"] >= settings["target_margin_pct"],
+                "target_pct": settings["target_margin_pct"],
                 "keep_per_dollar": round(1 - settings["commission_pct"] / 100, 2),
             }
 
@@ -689,6 +747,8 @@ def dish_view(dish_id, proposal_override=None, recipe_override=None):
         "recipe_edited": STATE["recipes"][dish_id] != {k: list(v) for k, v in dish["recipe"].items()},
         "before": before,
         "now": now,
+        "food_exact": food_now,
+        "comparison_basis": "before_run" if STATE["has_run"] else "saved_prices",
         "in_store": {"price": dish["prices"]["in_store"], "food_cost": cents(food_now),
                      "left": cents(dish["prices"]["in_store"] - food_now)},
         "status": dish_status,
@@ -773,7 +833,9 @@ def set_proposal(dish_id, value):
     if error:
         return error
     _decision(dish_id)["price"] = price
-    _log("edited", dish=dish_id, price=price)
+    after = dish_view(dish_id)["proposal"]
+    _log("edited", dish=dish_id, price=price, reaches_target=bool(after and after["reaches_target"]),
+         margin=after and after["after"]["margin_pct"])
     return {}
 
 
@@ -789,11 +851,15 @@ def approve(dish_id):
         "left_before": view["now"]["left"], "left_after": p["after"]["left"],
         "per_order_change": p["per_order_change"], "monthly_change": p["monthly_change"],
         "monthly_orders": view["monthly_orders"], "commission_pct": STATE["settings"]["commission_pct"],
+        # Owner-entered price vs. the suggested one, and whether it reaches the target (it may not, on purpose).
+        "edited": p["edited"], "reaches_target": p["reaches_target"],
+        "margin_after": p["after"]["margin_pct"], "target_pct": STATE["settings"]["target_margin_pct"],
         "reason": None, "user_id": STATE.get("actor"), "published": False, "undone": False,
     }
     STATE["decision_log"].append(record)
     _decision(dish_id)["state"] = "approved"
-    _log("approved", dish=dish_id, to_price=p["price"])
+    _log("approved", dish=dish_id, to_price=p["price"], edited=p["edited"], reaches_target=p["reaches_target"],
+         margin=p["after"]["margin_pct"])
     return {"record": record}
 
 
@@ -979,6 +1045,8 @@ def _report(dishes):
                              "from_price": d["now"]["price"], "to_price": d["proposal"]["price"],
                              "per_order_change": d["proposal"]["per_order_change"],
                              "monthly_change": d["proposal"]["monthly_change"], "orders": d["monthly_orders"],
+                             "edited": d["proposal"]["edited"], "reaches_target": d["proposal"]["reaches_target"],
+                             "margin": d["proposal"]["after"]["margin_pct"],
                              "approved_at": d["approval"]["at"] if d["approval"] else None})
     verified.sort(key=lambda x: x["at"])
     return {"verified": verified, "needs_input": needs_input, "proposed": proposed}
@@ -1012,20 +1080,22 @@ def _open_corrections():
 
 def view():
     dishes = [dish_view(d) for d in DISHES]
+    # One entry per ingredient: the current cost record vs. the explicit comparison (before tonight's run).
+    # Earlier invoice lines stay visible as history but are never presented as the current price.
     changes = []
-    for inv in STATE["invoices"]:
-        for line in inv["lines"]:
-            if line["applied"]:
-                old, new = _per_base_cost(line["prev"]), _per_base_cost(line)
-                pct = round(new / old - 1, 4)
-                if abs(pct) > 0.0005:
-                    changes.append({"ingredient": line["ingredient"], "pct": pct, "alert": abs(pct) >= ALERT_CHANGE,
-                                    "prev": line["prev"], "prev_source": line["prev_source"],
-                                    "now": {f: line[f] for f in ("pack_size", "pack_unit", "pack_price")},
-                                    "source": STATE["sources"][line["ingredient"]],
-                                    "invoice_id": inv["id"], "line_id": line["id"], "original": line["original"],
-                                    "has_image": bool(inv["rows"]),
-                                    "dishes": [d for d in DISHES if line["ingredient"] in STATE["recipes"][d]]})
+    for key in INGREDIENTS:
+        rec = cost_record(key)
+        src = rec["current"]["source"]
+        if src.get("invoice_id") is None or abs(rec["pct"]) <= 0.0005:
+            continue
+        inv = STATE["invoices"][src["invoice_id"]]
+        changes.append({"ingredient": key, "pct": rec["pct"], "alert": abs(rec["pct"]) >= ALERT_CHANGE,
+                        "comparison": _pack(rec["comparison"]), "comparison_source": rec["comparison"]["source"],
+                        "comparison_basis": rec["comparison"]["basis"],
+                        "current": _pack(rec["current"]), "current_source": src, "earlier": rec["earlier"],
+                        "invoice_id": inv["id"], "line_id": src["line_id"], "original": src.get("original", ""),
+                        "has_image": bool(inv["rows"]),
+                        "dishes": [d for d in DISHES if key in STATE["recipes"][d]]})
 
     invoices = []
     for inv in STATE["invoices"]:

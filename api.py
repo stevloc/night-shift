@@ -7,6 +7,7 @@ Run locally:   uvicorn api:app --port 8000      (or: python api.py, which reads 
 """
 
 import asyncio
+import contextlib
 import hmac
 import os
 import re
@@ -19,6 +20,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import engine
+import options
+import review
 from auth import AuthError, SupabaseAuth
 from config import CONFIG
 from data import DISHES
@@ -31,6 +34,9 @@ SESSION_ID = re.compile(r"^[A-Za-z0-9_-]{16,64}$")
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024
 ERROR_STATUS = {"too_large": 413, "bad_file": 415, "rate_limited": 429, "ai_not_configured": 503}
 PUBLIC_PATHS = {"/api/health", "/api/config", "/api/nightly-run"}
+# The AI decision review must not hold the restaurant's lock while it waits for the model:
+# the route takes the lock itself, before and after the call (and never saves anything).
+UNLOCKED_PATH = re.compile(r"^/api/dishes/[^/]+/review$")
 
 # Production (Supabase) vs. local demo mode (in-memory sandboxes keyed by a cookie).
 if CONFIG.supabase_enabled:
@@ -59,12 +65,16 @@ async def visitor_session(request: Request, call_next):
     item = engine.SESSIONS.get(sid)
     if item["lock"] is None:
         item["lock"] = asyncio.Lock()
-    async with item["lock"]:
-        token = engine.use_session(item["state"])
-        try:
-            response = await call_next(request)
-        finally:
-            engine._current.reset(token)
+    if UNLOCKED_PATH.match(request.url.path):
+        request.state.session_item = item
+        response = await call_next(request)
+    else:
+        async with item["lock"]:
+            token = engine.use_session(item["state"])
+            try:
+                response = await call_next(request)
+            finally:
+                engine._current.reset(token)
     if is_new:
         https = request.headers.get("x-forwarded-proto", request.url.scheme) == "https"
         response.set_cookie(COOKIE, sid, max_age=7 * 24 * 3600, httponly=True, samesite="lax", secure=https)
@@ -85,6 +95,9 @@ async def _with_supabase_user(request: Request, call_next):
         return _unauthorized()
     restaurant_id = await STORE.restaurant_for(user["id"])   # first sign-in: create_demo_restaurant
     request.state.user = user
+    if UNLOCKED_PATH.match(request.url.path):
+        request.state.restaurant_id = restaurant_id
+        return await call_next(request)
     async with LOCKS.setdefault(restaurant_id, asyncio.Lock()):
         state, meta = await STORE.load(restaurant_id)
         state["actor"] = user["id"]
@@ -97,6 +110,29 @@ async def _with_supabase_user(request: Request, call_next):
         finally:
             engine._current.reset(token)
     return response
+
+
+@contextlib.asynccontextmanager
+async def _bound_state(request: Request):
+    """For the unlocked review route: this visitor's / restaurant's state, under its lock, read-only."""
+    if STORE is None:
+        item = request.state.session_item
+        async with item["lock"]:
+            token = engine.use_session(item["state"])
+            try:
+                yield
+            finally:
+                engine._current.reset(token)
+        return
+    restaurant_id = request.state.restaurant_id
+    async with LOCKS.setdefault(restaurant_id, asyncio.Lock()):
+        state, _meta = await STORE.load(restaurant_id)
+        state["actor"] = request.state.user["id"]
+        token = engine.use_session(state)
+        try:
+            yield
+        finally:
+            engine._current.reset(token)
 
 
 def _client_ip(request: Request):
@@ -166,6 +202,14 @@ class KeepPrice(BaseModel):
 
 class CorrectionChoice(BaseModel):
     choice: str = ""
+
+
+class ReviewRequest(BaseModel):
+    note: str = ""
+    max_price: float | str | None = None
+    max_increase: float | str | None = None
+    snapshot_version: str | None = None   # what the owner is looking at; a mismatch means stale
+    lang: str = "en"
 
 
 # ------------------------------------------------------------------ routes
@@ -319,6 +363,60 @@ def dismiss(dish_id: str, body: Dismissal):
 def keep_price(dish_id: str, body: KeepPrice):
     """Keep the current DoorDash price on purpose (saved to the decision log, reason optional)."""
     return _respond(engine.keep_price(_dish(dish_id), body.note))
+
+
+def _context(dish_id, note, max_price, max_increase):
+    context, errors = options.owner_context(dish_id, note, max_price, max_increase)
+    if errors:
+        raise HTTPException(422, detail={"error": "invalid", "fields": errors})
+    return context
+
+
+@app.get("/api/dishes/{dish_id}/options")
+def dish_options(dish_id: str, max_price: str | None = None, max_increase: str | None = None):
+    """Deterministic option comparison (no AI): keep / suggested / your price / your limit, with sensitivity."""
+    return {"snapshot": options.snapshot(_dish(dish_id), _context(dish_id, "", max_price, max_increase))}
+
+
+@app.post("/api/dishes/{dish_id}/review")
+async def review_options(dish_id: str, body: ReviewRequest, request: Request):
+    """One owner-triggered AI decision review. Read-only: it never approves, resolves or changes anything.
+
+    Every outcome returns the code-computed snapshot, so the comparison stays usable when the AI is not.
+    status: ok | held | no_options | stale | unavailable (reason: ai_not_configured | rate_limited |
+            timeout | provider_error | invalid_output)
+    """
+    _dish(dish_id)
+    lang = body.lang if body.lang in ("en", "es") else "en"
+    async with _bound_state(request):
+        context = _context(dish_id, body.note, body.max_price, body.max_increase)
+        snap = options.snapshot(dish_id, context)
+    out = {"snapshot": snap}
+    if body.snapshot_version and body.snapshot_version != snap["version"]:
+        return {**out, "status": "stale"}
+    if snap["dish_status"] == "held" or snap["holds"]["open_corrections"]:
+        return {**out, "status": "held"}           # never advise on prices from an unconfirmed cost
+    if len(snap["options"]) < 2 or "approve" not in snap["allowed_actions"]:
+        return {**out, "status": "no_options"}
+    key = review.cache_key(snap, lang)
+    hit = review.cached(key)
+    if hit:
+        return {**out, "status": "ok", **hit}
+    if not CONFIG.openrouter_api_key:
+        return {**out, "status": "unavailable", "reason": "ai_not_configured"}
+    allowed, wait = review.REVIEWS.take(_client_ip(request))
+    if not allowed:
+        return {**out, "status": "unavailable", "reason": "rate_limited", "retry_minutes": max(1, -(-int(wait) // 60))}
+
+    result, reason = await run_in_threadpool(review.call, snap, lang)   # no lock held while waiting
+    if reason:
+        return {**out, "status": "unavailable", "reason": "invalid_output" if reason not in ("timeout", "provider_error")
+                else reason}
+    async with _bound_state(request):                 # inputs may have changed while the model was thinking
+        fresh = options.snapshot(dish_id, context)
+    if fresh["version"] != snap["version"]:
+        return {"snapshot": fresh, "status": "stale"}  # discard: written for numbers that no longer apply
+    return {**out, "status": "ok", **review.store(key, result, snap)}
 
 
 @app.post("/api/corrections/{correction_id}")

@@ -602,3 +602,38 @@ main { overflow-wrap: anywhere; }
   .orders-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 .rec > .btn { justify-self: start; }
+
+/* ------------------------------------------------------------ decision log: stacked cards (readable in narrow columns) */
+.decision-cards { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.decision-cards li { display: grid; gap: 6px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border);
+  background: var(--surface-sunk); overflow-wrap: normal; word-break: normal; }
+.decision-cards li.undone { opacity: 0.8; }
+.decision-card-head, .decision-card-foot { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; justify-content: space-between; }
+.decision-card-head time { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* ------------------------------------------------------------ "Review my options" */
+.options-review { display: grid; gap: 12px; }
+.options-review > .btn { justify-self: start; }
+.options-review h5, .review-result h5 { font-size: 1rem; font-family: "Space Grotesk", sans-serif; }
+.review-result h6 { font-size: 0.85rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+.options-review textarea { width: 100%; min-height: 64px; font: inherit; padding: 10px 12px; border-radius: 10px;
+  border: 1.5px solid var(--control-border); background: var(--surface); color: var(--text); resize: vertical; }
+.options-review textarea:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.option-cards { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.option-cards li { display: grid; gap: 4px; align-content: start; padding: 12px 14px; border-radius: 12px;
+  border: 1px solid var(--border); background: var(--surface); }
+.option-cards li.recommended { border: 2px solid var(--success); }
+.option-cards .option-name { font-weight: 700; }
+.option-cards .option-price { font-family: "Space Grotesk", sans-serif; font-size: 1.3rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.option-cards .pill { justify-self: start; }
+.option-cards svg { vertical-align: -3px; margin-right: 4px; }
+.sensitivity .btn { min-height: 44px; font-size: 0.9rem; }
+.ai-review { border-top: 1px solid var(--border); padding-top: 12px; }
+.review-result { padding: 14px 16px; border-radius: 14px; border: 1.5px solid var(--accent); background: var(--surface); }
+.review-result.is-stale { border-style: dashed; opacity: 0.85; }
+.stack-sm { display: grid; gap: 6px; }
+.review-points { margin: 0; padding-left: 1.1rem; display: grid; gap: 8px; }
+.evidence-links { list-style: none; margin: 2px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 0.85rem; }
+.evidence-links a { font-weight: 600; }
+.tag { display: inline-block; margin-right: 6px; padding: 0 8px; border-radius: 999px; font-size: 0.78rem; font-weight: 700;
+  background: var(--warn-soft); color: var(--text); }

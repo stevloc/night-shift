@@ -1,13 +1,17 @@
-"""The AI's one job: read a supplier invoice photo into structured data.
+"""The two AI calls in Night Shift. Both go through OpenRouter with the same key and model.
 
-It reports the header it sees (supplier, invoice number, date, printed total) and, for each
-printed line, the matching ingredient, pack size + unit and price per pack, listing any field
-it could not read clearly. It never calculates: code checks totals, duplicates and costs.
-Code (engine.py) decides whether a line is verified or needs the owner's review.
+1. extract_invoice(): read a supplier invoice photo/PDF into structured data.
+   It reports the header it sees (supplier, invoice number, date, printed total) and, for each
+   printed line, the matching ingredient, pack size + unit and price per pack, listing any field
+   it could not read clearly. It never calculates: code checks totals, duplicates and costs.
+   Code (engine.py) decides whether a line is verified or needs the owner's review.
+   Demo invoices never reach this function: engine.py matches their hash and uses
+   demo-data/invoices_extracted_fallback.json. Readings of new uploads are cached on disk
+   (llm_cache.json) by content hash, so the same file is never paid for twice.
 
-Demo invoices never reach this module: engine.py matches their hash and uses
-demo-data/invoices_extracted_fallback.json. Readings of new uploads are cached on disk
-(llm_cache.json) by content hash, so the same file is never paid for twice.
+2. review_decision(): one owner-triggered "Review my options" call (review.py builds the prompt from
+   the code-computed snapshot and validates the answer). Bounded timeout and output, no retries.
+
 The API key is read from the environment only (OPENROUTER_API_KEY).
 """
 
@@ -41,12 +45,12 @@ def _cache_key(image_hash):
     return f"invoice-v4:{MODEL}:{image_hash}"
 
 
-def _client():
+def _client(timeout=60, max_retries=1):
     return OpenAI(
         base_url="https://openrouter.ai/api/v1",
         api_key=CONFIG.openrouter_api_key or "",  # empty key -> auth error -> handled below
-        timeout=60,
-        max_retries=1,
+        timeout=timeout,
+        max_retries=max_retries,
     )
 
 
@@ -143,3 +147,17 @@ def extract_invoice(image_bytes, mime_type="image/png", fallback=None):
         if not fallback:
             return None, True
         return {**fallback, "lines": [dict(line) for line in fallback["lines"]]}, True
+
+
+REVIEW_TIMEOUT_SECONDS = 25
+REVIEW_MAX_TOKENS = 900
+
+
+def review_decision(system, user):
+    """One decision-review call. Returns the parsed JSON object; raises on any failure (the caller
+    shows an honest "unavailable" state). No retries, bounded time and output, temperature 0."""
+    response = _client(timeout=REVIEW_TIMEOUT_SECONDS, max_retries=0).chat.completions.create(
+        model=MODEL, temperature=0, max_tokens=REVIEW_MAX_TOKENS,
+        messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+    )
+    return _parse_json(response.choices[0].message.content or "")

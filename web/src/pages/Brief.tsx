@@ -4,16 +4,18 @@
 import { useState } from "react";
 import { api, type Dish } from "../api";
 import { useApp, useMediaQuery, type Route } from "../context";
-import { dishName, dishStatus, packText, reasonText } from "../format";
-import { invoiceSource, pctChangeSource, breakdownSources, targetSource } from "../sources";
+import { dishName, dishStatus, reasonText } from "../format";
+import { breakdownSources, targetSource } from "../sources";
+import { CostChangeLine, EarlierInvoices } from "../components/CostChange";
 import { Icon } from "../components/Icon";
 import { Num } from "../components/Num";
+import { HeldOptions } from "../components/OptionsReview";
 import { HeldNotes, RecommendationCard } from "../components/Recommendation";
 import { WhileYouSlept } from "../components/WhileYouSlept";
 
 export function Brief(_: { route: Route }) {
   const { view, i18n, runNightShift, running, requestReset } = useApp();
-  const { t, tp, rich, money, approx, name, pctPoints } = i18n;
+  const { t, tp, money, approx, name, pctPoints } = i18n;
 
   const decisionDishes = view.dishes.filter((d) => d.proposal || d.decision !== "open");
   const others = view.dishes.filter((d) => !decisionDishes.includes(d));
@@ -64,18 +66,9 @@ export function Brief(_: { route: Route }) {
               <li key={c.ingredient} className={c.pct > 0 ? "alert" : undefined}>
                 <Icon name={c.pct > 0 ? "alert" : "down"} size={20} />
                 <div>
-                  <p>
-                    <strong>{rich("change_line", {
-                      ingredient: name(view.ingredients[c.ingredient].name),
-                      old: <Num source={invoiceSource(c.prev_source, i18n)}>{money(c.prev.pack_price)}</Num>,
-                      new: <Num source={invoiceSource(c.source, i18n)}>{money(c.now.pack_price)}</Num>,
-                      pack: packText(c.now, i18n),
-                    })}</strong>{" "}
-                    <span className={c.pct > 0 ? "text-bad" : "text-good"}>
-                      ({rich(c.pct > 0 ? "change_up" : "change_down", {
-                        pct: <Num source={pctChangeSource(c.prev, c.now, i18n)}>{i18n.pct(c.pct)}</Num> })})
-                    </span>
-                  </p>
+                  <p><CostChangeLine change={c} strong /></p>
+                  <p className="hint">{t("current_from", { no: c.current_source.invoice_no, date: i18n.day(c.current_source.date) })}</p>
+                  <EarlierInvoices change={c} />
                   <p className="hint">{t("used_in", { dishes: i18n.list(c.dishes.map((d) => dishName(view, d, i18n))) })}</p>
                 </div>
               </li>
@@ -135,44 +128,39 @@ export function Brief(_: { route: Route }) {
       <section className="card stack" aria-labelledby="log-title">
         <h2 id="log-title">{t("approval_log")}</h2>
         {view.decision_log.length === 0 ? <p className="hint">{t("log_empty")}</p> : (
-          <div className="table-wrap" role="region" aria-labelledby="log-title" tabIndex={0}>
-            <table>
-              <caption>{t("approval_caption")}</caption>
-              <thead>
-                <tr>
-                  <th scope="col">{t("col_time")}</th>
-                  <th scope="col">{t("col_dish")}</th>
-                  <th scope="col">{t("col_decision")}</th>
-                  <th scope="col" className="num">{t("col_effect")}</th>
-                  <th scope="col">{t("col_status")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {[...view.decision_log].reverse().map((a) => (
-                  <tr key={a.id}>
-                    <td><time dateTime={a.at}>{i18n.time(a.at)}</time></td>
-                    <th scope="row">{dishName(view, a.dish, i18n)}</th>
-                    <td>{a.kind === "price_scenario"
-                      ? t("log_scenario", { from: money(a.from_price!), to: money(a.to_price!) })
-                      : a.kind === "kept_price"
-                        ? <>{t("log_kept", { price: money(a.from_price!), scenario: money(a.scenario_price!) })}
-                          {a.note && <span className="hint"> · “{a.note}”</span>}</>
-                        : t("log_dismissed", { reason: reasonText(a.reason!, a.note, i18n) })}</td>
-                    <td className="num">{a.kind === "price_scenario" ? approx(a.monthly_change!) : "—"}</td>
-                    <td>
-                      {a.undone
-                        ? <span className="pill neutral"><Icon name="undo" size={16} />{t("log_undone", { time: i18n.time(a.undone_at!) })}</span>
-                        : a.kind === "price_scenario"
-                          ? <span className="pill good"><Icon name="check" size={16} />{t("log_saved")}</span>
-                          : a.kind === "kept_price"
-                            ? <span className="pill neutral"><Icon name="check" size={16} />{t("log_kept_status")}</span>
-                            : <span className="pill neutral"><Icon name="minus" size={16} />{t("log_dismissed_status")}</span>}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <>
+            <p className="hint">{t("approval_caption")}</p>
+            {/* Stacked cards, not a table: readable in the narrow tablet column and on phones. */}
+            <ol className="decision-cards">
+              {[...view.decision_log].reverse().map((a) => (
+                <li key={a.id} className={a.undone ? "undone" : undefined}>
+                  <div className="decision-card-head">
+                    <strong>{dishName(view, a.dish, i18n)}</strong>
+                    <time dateTime={a.at} className="hint">{i18n.time(a.at)}</time>
+                  </div>
+                  <p>{a.kind === "price_scenario"
+                    ? <>{t(a.edited ? "log_scenario_own" : "log_scenario", { from: money(a.from_price!), to: money(a.to_price!) })}
+                      {a.reaches_target === false && <span className="text-warn"> · {t("log_below_target", { pct: pctPoints(a.margin_after!) })}</span>}</>
+                    : a.kind === "kept_price"
+                      ? <>{t("log_kept", { price: money(a.from_price!), scenario: money(a.scenario_price!) })}
+                        {a.note && <span className="hint"> · “{a.note}”</span>}</>
+                      : t("log_dismissed", { reason: reasonText(a.reason!, a.note, i18n) })}</p>
+                  <div className="decision-card-foot">
+                    {a.kind === "price_scenario" && (
+                      <span className="hint">{t("col_effect")}: {approx(a.monthly_change!)}</span>
+                    )}
+                    {a.undone
+                      ? <span className="pill neutral"><Icon name="undo" size={16} />{t("log_undone", { time: i18n.time(a.undone_at!) })}</span>
+                      : a.kind === "price_scenario"
+                        ? <span className="pill good"><Icon name="check" size={16} />{t("log_saved")}</span>
+                        : a.kind === "kept_price"
+                          ? <span className="pill neutral"><Icon name="check" size={16} />{t("log_kept_status")}</span>
+                          : <span className="pill neutral"><Icon name="minus" size={16} />{t("log_dismissed_status")}</span>}
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </>
         )}
       </section>
 
@@ -274,6 +262,7 @@ function DishSummary({ dish }: { dish: Dish }) {
         </p>
       </section>
       {dish.held_by.length > 0 && <HeldNotes dish={dish} />}
+      {dish.held_by.length > 0 && <HeldOptions dish={dish} />}
       {dish.held_by.length > 0 && (
         <a className="btn btn-primary" href="#/invoices"><Icon name="eye" />{t("review_now")}</a>
       )}
