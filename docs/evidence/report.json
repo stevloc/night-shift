@@ -1,0 +1,93 @@
+{
+  "contract": "5-minute judged demo. Happy path: inbox run -> Brisket Pho below target -> Compare price scenario (+$0.75/order, ~$169/month at 225 forecast orders) -> Approve saves to decision log, never published. Sad paths: rice paper line needs review (crop + packs x sheets correction clears the hold, logged); forwarded scan skipped as duplicate (supplier+number+total). Every number shows its source on tap/hover/Enter. English + Spanish, WCAG 2.2 AA.",
+  "targetViewports": [
+    "390x844",
+    "1440x900"
+  ],
+  "accessibility": {
+    "status": "pass",
+    "evidence": "Lighthouse accessibility 100 on Morning Brief (Spanish, night), Invoice Review (day) and Dish Detail (day) after fixing two findings (day-mode green pill contrast 4.33 -> 4.5+, Spanish button label-in-name). 137 source popovers on the 3 views: all stay on screen at 390px (fixed position, clamped), Esc closes and keeps focus, hover has a close delay. Touch targets >= 44px (numbers are inline text targets, exempt under 2.5.8). One h1 per view."
+  },
+  "responsive": {
+    "status": "pass",
+    "evidence": "390x844 and 1440x900; English and Spanish at 18px and 22px (Larger text): no sideways scroll on any view after fixing grid min-width, unbreakable file names, non-wrapping pills and bottom-nav labels. Invoice line crops are stacked so text is readable on phones."
+  },
+  "contentStates": {
+    "loading": {
+      "status": "pass",
+      "evidence": "role=status spinner on first load and 'Reading the invoice' during upload."
+    },
+    "empty": {
+      "status": "pass",
+      "evidence": "Brief before any invoice: one sentence plus 'Read tonight's sample invoice' and 'Go to Invoice Review' (v3-01-brief-empty-390.png)."
+    },
+    "error": {
+      "status": "pass",
+      "evidence": "Fix-line dialog with empty pack size and unit shows inline errors (v3-03-fix-line-errors-390.png). Settings 'abc' packaging shows inline Spanish error (v3-07-settings-es-390.png). Unreadable photo returns could_not_read."
+    },
+    "partial": {
+      "status": "pass",
+      "evidence": "Rice paper line 'Needs review' with highlighted crop holds Spring Rolls while everything else is verified (v4-02-needs-review-crop-390.png); no-AI run falls back to seeded readings and produces the same demo."
+    },
+    "success": {
+      "status": "pass",
+      "evidence": "Owner confirmed rice paper case = 500 sheets: hold cleared, logged with timestamp and 20 x 25 evidence; approving the scenario saves 'Update this price in your DoorDash Merchant Portal.' (v4-03-fix-rice-paper-390.png, v4-04-while-you-slept-390.png)."
+    },
+    "permission": {
+      "status": "pass",
+      "evidence": "No DoorDash connection: approval never claims publishing; record has published=false; UI says 'Night Shift did not change DoorDash'. Trust rules in Settings: price changes always need the owner's approval."
+    }
+  },
+  "renderedEvidence": [
+    {
+      "viewport": "390x844",
+      "artifact": "v3-01-brief-empty-390.png",
+      "observation": "Empty brief with single primary action."
+    },
+    {
+      "viewport": "390x844",
+      "artifact": "v3-02-invoice-review-390.png",
+      "observation": "Needs-review line first, holding Spring Rolls; verified brisket line with normalized cost and +12%."
+    },
+    {
+      "viewport": "390x844",
+      "artifact": "v3-04-brief-recommendation-390.png",
+      "observation": "What changed, Brisket Pho below target, money effect, proposed +$1, Approve/Edit/Dismiss."
+    },
+    {
+      "viewport": "390x844",
+      "artifact": "v3-05-approved-390.png",
+      "observation": "Saved state, portal instruction, timestamp, Undo countdown with focus."
+    },
+    {
+      "viewport": "1440x900",
+      "artifact": "v3-06-dish-detail-es-day-1440.png",
+      "observation": "Spanish, day theme: ingredient table and before/now/proposed calculation add up to the cent."
+    },
+    {
+      "viewport": "390x844",
+      "artifact": "v4-01-scenario-390.png",
+      "observation": "Price scenario labeled 'at unchanged order volume', +$0.75/order, ~$169/month, Forecast source popover open."
+    },
+    {
+      "viewport": "390x844",
+      "artifact": "v4-02-needs-review-crop-390.png",
+      "observation": "Needs review line with invoice crop highlighted (before the stacked-crop fix: too small, prompted the change)."
+    },
+    {
+      "viewport": "390x844",
+      "artifact": "v4-03-fix-rice-paper-390.png",
+      "observation": "Packs x sheets entry with live '= 500 sheets in the case'."
+    },
+    {
+      "viewport": "390x844",
+      "artifact": "v4-04-while-you-slept-390.png",
+      "observation": "Three separate groups: Needs your input, Proposed not applied, Verified with evidence."
+    },
+    {
+      "viewport": "390x844",
+      "artifact": "v4-05-source-in-table-390.png",
+      "observation": "Source popover escapes the scrolling calculation table."
+    }
+  ]
+}

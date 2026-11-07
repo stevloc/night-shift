@@ -1,0 +1,30 @@
+dish,ingredient_id,qty_per_serving
+Brisket Pho,brisket,0.35
+Brisket Pho,beef_bones,0.5
+Brisket Pho,pho_noodles,0.3
+Brisket Pho,thai_basil,0.04
+Brisket Pho,bean_sprouts,0.15
+Brisket Pho,onions,0.1
+Brisket Pho,fish_sauce,0.5
+Brisket Pho,pho_spices,1
+Chicken Pho,chicken_thigh,0.3
+Chicken Pho,beef_bones,0.3
+Chicken Pho,pho_noodles,0.3
+Chicken Pho,thai_basil,0.04
+Chicken Pho,bean_sprouts,0.15
+Chicken Pho,onions,0.1
+Chicken Pho,fish_sauce,0.5
+Chicken Pho,pho_spices,1
+Banh Mi (grilled pork),baguette,1
+Banh Mi (grilled pork),pork_shoulder,0.25
+Banh Mi (grilled pork),carrots,0.08
+Banh Mi (grilled pork),fish_sauce,0.25
+Bun Cha,pork_shoulder,0.35
+Bun Cha,vermicelli,0.25
+Bun Cha,carrots,0.05
+Bun Cha,thai_basil,0.03
+Bun Cha,fish_sauce,1.0
+Spring Rolls (2),rice_paper,2
+Spring Rolls (2),shrimp,0.12
+Spring Rolls (2),vermicelli,0.06
+Spring Rolls (2),thai_basil,0.02

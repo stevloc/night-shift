@@ -1,0 +1,16 @@
+ingredient_id,name,invoice_alias,pack_desc,pack_size,base_unit,last_pack_price,yield_pct
+brisket,Beef brisket,BEEF BRISKET CHOICE,20 LB case,20,lb,119.8,70
+chicken_thigh,"Chicken thigh, boneless",CHKN THIGH BNLS,40 LB case,40,lb,95.6,75
+pork_shoulder,Pork shoulder,PORK SHOULDER BNLS,30 LB case,30,lb,89.7,70
+beef_bones,Beef soup bones,BEEF SOUP BONES,40 LB case,40,lb,48.0,100
+pho_noodles,Rice noodles (banh pho),RICE STICK 3MM,30 LB case,30,lb,54.0,100
+vermicelli,Rice vermicelli,RICE VERMICELLI,30 LB case,30,lb,57.0,100
+rice_paper,Rice paper 22cm,RICE PAPER 22CM,case of 20 packs x 50 sheets,1000,sheet,76.0,95
+shrimp,"Shrimp 31/40, cooked",SHRIMP 31/40 CKD,2 LB bag,2,lb,19.98,90
+thai_basil,Thai basil,THAI BASIL,5 LB case,5,lb,22.5,80
+bean_sprouts,Bean sprouts,BEAN SPROUTS,10 LB case,10,lb,12.0,90
+onions,Yellow onions,ONION YELLOW JBO,50 LB sack,50,lb,32.0,90
+carrots,Carrots,CARROTS JUMBO,25 LB sack,25,lb,21.0,85
+baguette,Banh mi baguette,BAGUETTE 8IN,24 ct,24,each,14.4,100
+fish_sauce,Fish sauce,FISH SAUCE,1 gal (128 fl oz),128,fl_oz,14.0,100
+pho_spices,Pho spice kit,PHO SPICE KIT,kit for 40 bowls,40,bowl,18.0,100

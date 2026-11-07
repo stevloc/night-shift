@@ -1,0 +1,11 @@
+{
+  "restaurant": {
+    "name": "Pho Nightingale (fictional)",
+    "address": "100 Example St, Pittsburgh, PA"
+  },
+  "doordash_commission_pct": 25,
+  "packaging_per_delivery_order": 0.5,
+  "target_delivery_margin_pct": 38,
+  "currency": "USD",
+  "note": "Margin = price - ingredient cost - packaging - DoorDash commission. Labor and overhead excluded."
+}

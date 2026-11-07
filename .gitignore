@@ -1,0 +1,7 @@
+__pycache__/
+.env
+.env.*
+!.env.example
+llm_cache.json
+*.zip
+.DS_Store

@@ -1,0 +1,451 @@
+date,dish,orders
+2026-08-09,Brisket Pho,6
+2026-08-09,Chicken Pho,7
+2026-08-09,Banh Mi (grilled pork),4
+2026-08-09,Bun Cha,3
+2026-08-09,Spring Rolls (2),4
+2026-08-10,Brisket Pho,5
+2026-08-10,Chicken Pho,6
+2026-08-10,Banh Mi (grilled pork),4
+2026-08-10,Bun Cha,4
+2026-08-10,Spring Rolls (2),5
+2026-08-11,Brisket Pho,6
+2026-08-11,Chicken Pho,4
+2026-08-11,Banh Mi (grilled pork),0
+2026-08-11,Bun Cha,4
+2026-08-11,Spring Rolls (2),5
+2026-08-12,Brisket Pho,7
+2026-08-12,Chicken Pho,1
+2026-08-12,Banh Mi (grilled pork),0
+2026-08-12,Bun Cha,1
+2026-08-12,Spring Rolls (2),4
+2026-08-13,Brisket Pho,7
+2026-08-13,Chicken Pho,5
+2026-08-13,Banh Mi (grilled pork),5
+2026-08-13,Bun Cha,2
+2026-08-13,Spring Rolls (2),6
+2026-08-14,Brisket Pho,10
+2026-08-14,Chicken Pho,5
+2026-08-14,Banh Mi (grilled pork),9
+2026-08-14,Bun Cha,5
+2026-08-14,Spring Rolls (2),10
+2026-08-15,Brisket Pho,7
+2026-08-15,Chicken Pho,5
+2026-08-15,Banh Mi (grilled pork),5
+2026-08-15,Bun Cha,4
+2026-08-15,Spring Rolls (2),9
+2026-08-16,Brisket Pho,8
+2026-08-16,Chicken Pho,4
+2026-08-16,Banh Mi (grilled pork),2
+2026-08-16,Bun Cha,2
+2026-08-16,Spring Rolls (2),9
+2026-08-17,Brisket Pho,3
+2026-08-17,Chicken Pho,4
+2026-08-17,Banh Mi (grilled pork),4
+2026-08-17,Bun Cha,0
+2026-08-17,Spring Rolls (2),5
+2026-08-18,Brisket Pho,8
+2026-08-18,Chicken Pho,0
+2026-08-18,Banh Mi (grilled pork),3
+2026-08-18,Bun Cha,2
+2026-08-18,Spring Rolls (2),3
+2026-08-19,Brisket Pho,7
+2026-08-19,Chicken Pho,4
+2026-08-19,Banh Mi (grilled pork),1
+2026-08-19,Bun Cha,4
+2026-08-19,Spring Rolls (2),6
+2026-08-20,Brisket Pho,9
+2026-08-20,Chicken Pho,8
+2026-08-20,Banh Mi (grilled pork),5
+2026-08-20,Bun Cha,3
+2026-08-20,Spring Rolls (2),2
+2026-08-21,Brisket Pho,10
+2026-08-21,Chicken Pho,5
+2026-08-21,Banh Mi (grilled pork),4
+2026-08-21,Bun Cha,1
+2026-08-21,Spring Rolls (2),5
+2026-08-22,Brisket Pho,7
+2026-08-22,Chicken Pho,10
+2026-08-22,Banh Mi (grilled pork),1
+2026-08-22,Bun Cha,1
+2026-08-22,Spring Rolls (2),8
+2026-08-23,Brisket Pho,11
+2026-08-23,Chicken Pho,7
+2026-08-23,Banh Mi (grilled pork),0
+2026-08-23,Bun Cha,0
+2026-08-23,Spring Rolls (2),7
+2026-08-24,Brisket Pho,4
+2026-08-24,Chicken Pho,2
+2026-08-24,Banh Mi (grilled pork),5
+2026-08-24,Bun Cha,4
+2026-08-24,Spring Rolls (2),5
+2026-08-25,Brisket Pho,6
+2026-08-25,Chicken Pho,5
+2026-08-25,Banh Mi (grilled pork),6
+2026-08-25,Bun Cha,3
+2026-08-25,Spring Rolls (2),5
+2026-08-26,Brisket Pho,7
+2026-08-26,Chicken Pho,1
+2026-08-26,Banh Mi (grilled pork),6
+2026-08-26,Bun Cha,4
+2026-08-26,Spring Rolls (2),6
+2026-08-27,Brisket Pho,1
+2026-08-27,Chicken Pho,4
+2026-08-27,Banh Mi (grilled pork),6
+2026-08-27,Bun Cha,0
+2026-08-27,Spring Rolls (2),5
+2026-08-28,Brisket Pho,11
+2026-08-28,Chicken Pho,3
+2026-08-28,Banh Mi (grilled pork),9
+2026-08-28,Bun Cha,5
+2026-08-28,Spring Rolls (2),7
+2026-08-29,Brisket Pho,10
+2026-08-29,Chicken Pho,9
+2026-08-29,Banh Mi (grilled pork),6
+2026-08-29,Bun Cha,7
+2026-08-29,Spring Rolls (2),6
+2026-08-30,Brisket Pho,6
+2026-08-30,Chicken Pho,8
+2026-08-30,Banh Mi (grilled pork),4
+2026-08-30,Bun Cha,2
+2026-08-30,Spring Rolls (2),8
+2026-08-31,Brisket Pho,9
+2026-08-31,Chicken Pho,3
+2026-08-31,Banh Mi (grilled pork),1
+2026-08-31,Bun Cha,2
+2026-08-31,Spring Rolls (2),4
+2026-09-01,Brisket Pho,5
+2026-09-01,Chicken Pho,7
+2026-09-01,Banh Mi (grilled pork),1
+2026-09-01,Bun Cha,4
+2026-09-01,Spring Rolls (2),2
+2026-09-02,Brisket Pho,4
+2026-09-02,Chicken Pho,6
+2026-09-02,Banh Mi (grilled pork),6
+2026-09-02,Bun Cha,4
+2026-09-02,Spring Rolls (2),6
+2026-09-03,Brisket Pho,7
+2026-09-03,Chicken Pho,5
+2026-09-03,Banh Mi (grilled pork),5
+2026-09-03,Bun Cha,3
+2026-09-03,Spring Rolls (2),6
+2026-09-04,Brisket Pho,10
+2026-09-04,Chicken Pho,7
+2026-09-04,Banh Mi (grilled pork),7
+2026-09-04,Bun Cha,5
+2026-09-04,Spring Rolls (2),13
+2026-09-05,Brisket Pho,10
+2026-09-05,Chicken Pho,6
+2026-09-05,Banh Mi (grilled pork),5
+2026-09-05,Bun Cha,4
+2026-09-05,Spring Rolls (2),10
+2026-09-06,Brisket Pho,6
+2026-09-06,Chicken Pho,6
+2026-09-06,Banh Mi (grilled pork),8
+2026-09-06,Bun Cha,0
+2026-09-06,Spring Rolls (2),3
+2026-09-07,Brisket Pho,6
+2026-09-07,Chicken Pho,5
+2026-09-07,Banh Mi (grilled pork),4
+2026-09-07,Bun Cha,2
+2026-09-07,Spring Rolls (2),6
+2026-09-08,Brisket Pho,6
+2026-09-08,Chicken Pho,3
+2026-09-08,Banh Mi (grilled pork),8
+2026-09-08,Bun Cha,3
+2026-09-08,Spring Rolls (2),3
+2026-09-09,Brisket Pho,6
+2026-09-09,Chicken Pho,4
+2026-09-09,Banh Mi (grilled pork),3
+2026-09-09,Bun Cha,0
+2026-09-09,Spring Rolls (2),4
+2026-09-10,Brisket Pho,9
+2026-09-10,Chicken Pho,2
+2026-09-10,Banh Mi (grilled pork),4
+2026-09-10,Bun Cha,5
+2026-09-10,Spring Rolls (2),8
+2026-09-11,Brisket Pho,13
+2026-09-11,Chicken Pho,2
+2026-09-11,Banh Mi (grilled pork),4
+2026-09-11,Bun Cha,3
+2026-09-11,Spring Rolls (2),9
+2026-09-12,Brisket Pho,12
+2026-09-12,Chicken Pho,0
+2026-09-12,Banh Mi (grilled pork),8
+2026-09-12,Bun Cha,1
+2026-09-12,Spring Rolls (2),10
+2026-09-13,Brisket Pho,3
+2026-09-13,Chicken Pho,6
+2026-09-13,Banh Mi (grilled pork),7
+2026-09-13,Bun Cha,3
+2026-09-13,Spring Rolls (2),7
+2026-09-14,Brisket Pho,7
+2026-09-14,Chicken Pho,4
+2026-09-14,Banh Mi (grilled pork),3
+2026-09-14,Bun Cha,5
+2026-09-14,Spring Rolls (2),7
+2026-09-15,Brisket Pho,5
+2026-09-15,Chicken Pho,9
+2026-09-15,Banh Mi (grilled pork),1
+2026-09-15,Bun Cha,4
+2026-09-15,Spring Rolls (2),4
+2026-09-16,Brisket Pho,6
+2026-09-16,Chicken Pho,6
+2026-09-16,Banh Mi (grilled pork),4
+2026-09-16,Bun Cha,4
+2026-09-16,Spring Rolls (2),2
+2026-09-17,Brisket Pho,3
+2026-09-17,Chicken Pho,6
+2026-09-17,Banh Mi (grilled pork),2
+2026-09-17,Bun Cha,1
+2026-09-17,Spring Rolls (2),2
+2026-09-18,Brisket Pho,12
+2026-09-18,Chicken Pho,8
+2026-09-18,Banh Mi (grilled pork),9
+2026-09-18,Bun Cha,2
+2026-09-18,Spring Rolls (2),7
+2026-09-19,Brisket Pho,6
+2026-09-19,Chicken Pho,9
+2026-09-19,Banh Mi (grilled pork),9
+2026-09-19,Bun Cha,2
+2026-09-19,Spring Rolls (2),12
+2026-09-20,Brisket Pho,10
+2026-09-20,Chicken Pho,5
+2026-09-20,Banh Mi (grilled pork),0
+2026-09-20,Bun Cha,6
+2026-09-20,Spring Rolls (2),6
+2026-09-21,Brisket Pho,4
+2026-09-21,Chicken Pho,5
+2026-09-21,Banh Mi (grilled pork),4
+2026-09-21,Bun Cha,5
+2026-09-21,Spring Rolls (2),2
+2026-09-22,Brisket Pho,8
+2026-09-22,Chicken Pho,7
+2026-09-22,Banh Mi (grilled pork),6
+2026-09-22,Bun Cha,2
+2026-09-22,Spring Rolls (2),3
+2026-09-23,Brisket Pho,8
+2026-09-23,Chicken Pho,5
+2026-09-23,Banh Mi (grilled pork),4
+2026-09-23,Bun Cha,5
+2026-09-23,Spring Rolls (2),4
+2026-09-24,Brisket Pho,1
+2026-09-24,Chicken Pho,4
+2026-09-24,Banh Mi (grilled pork),0
+2026-09-24,Bun Cha,4
+2026-09-24,Spring Rolls (2),6
+2026-09-25,Brisket Pho,7
+2026-09-25,Chicken Pho,6
+2026-09-25,Banh Mi (grilled pork),7
+2026-09-25,Bun Cha,4
+2026-09-25,Spring Rolls (2),11
+2026-09-26,Brisket Pho,9
+2026-09-26,Chicken Pho,10
+2026-09-26,Banh Mi (grilled pork),9
+2026-09-26,Bun Cha,7
+2026-09-26,Spring Rolls (2),6
+2026-09-27,Brisket Pho,10
+2026-09-27,Chicken Pho,1
+2026-09-27,Banh Mi (grilled pork),2
+2026-09-27,Bun Cha,0
+2026-09-27,Spring Rolls (2),9
+2026-09-28,Brisket Pho,2
+2026-09-28,Chicken Pho,4
+2026-09-28,Banh Mi (grilled pork),3
+2026-09-28,Bun Cha,2
+2026-09-28,Spring Rolls (2),3
+2026-09-29,Brisket Pho,6
+2026-09-29,Chicken Pho,8
+2026-09-29,Banh Mi (grilled pork),3
+2026-09-29,Bun Cha,3
+2026-09-29,Spring Rolls (2),6
+2026-09-30,Brisket Pho,5
+2026-09-30,Chicken Pho,2
+2026-09-30,Banh Mi (grilled pork),3
+2026-09-30,Bun Cha,4
+2026-09-30,Spring Rolls (2),1
+2026-10-01,Brisket Pho,5
+2026-10-01,Chicken Pho,7
+2026-10-01,Banh Mi (grilled pork),6
+2026-10-01,Bun Cha,3
+2026-10-01,Spring Rolls (2),7
+2026-10-02,Brisket Pho,9
+2026-10-02,Chicken Pho,3
+2026-10-02,Banh Mi (grilled pork),2
+2026-10-02,Bun Cha,3
+2026-10-02,Spring Rolls (2),10
+2026-10-03,Brisket Pho,7
+2026-10-03,Chicken Pho,5
+2026-10-03,Banh Mi (grilled pork),4
+2026-10-03,Bun Cha,1
+2026-10-03,Spring Rolls (2),7
+2026-10-04,Brisket Pho,4
+2026-10-04,Chicken Pho,6
+2026-10-04,Banh Mi (grilled pork),0
+2026-10-04,Bun Cha,4
+2026-10-04,Spring Rolls (2),4
+2026-10-05,Brisket Pho,1
+2026-10-05,Chicken Pho,5
+2026-10-05,Banh Mi (grilled pork),3
+2026-10-05,Bun Cha,0
+2026-10-05,Spring Rolls (2),3
+2026-10-06,Brisket Pho,6
+2026-10-06,Chicken Pho,3
+2026-10-06,Banh Mi (grilled pork),5
+2026-10-06,Bun Cha,4
+2026-10-06,Spring Rolls (2),6
+2026-10-07,Brisket Pho,7
+2026-10-07,Chicken Pho,7
+2026-10-07,Banh Mi (grilled pork),5
+2026-10-07,Bun Cha,3
+2026-10-07,Spring Rolls (2),0
+2026-10-08,Brisket Pho,9
+2026-10-08,Chicken Pho,8
+2026-10-08,Banh Mi (grilled pork),3
+2026-10-08,Bun Cha,2
+2026-10-08,Spring Rolls (2),10
+2026-10-09,Brisket Pho,3
+2026-10-09,Chicken Pho,8
+2026-10-09,Banh Mi (grilled pork),11
+2026-10-09,Bun Cha,2
+2026-10-09,Spring Rolls (2),9
+2026-10-10,Brisket Pho,15
+2026-10-10,Chicken Pho,7
+2026-10-10,Banh Mi (grilled pork),7
+2026-10-10,Bun Cha,6
+2026-10-10,Spring Rolls (2),5
+2026-10-11,Brisket Pho,7
+2026-10-11,Chicken Pho,6
+2026-10-11,Banh Mi (grilled pork),6
+2026-10-11,Bun Cha,3
+2026-10-11,Spring Rolls (2),6
+2026-10-12,Brisket Pho,3
+2026-10-12,Chicken Pho,3
+2026-10-12,Banh Mi (grilled pork),5
+2026-10-12,Bun Cha,3
+2026-10-12,Spring Rolls (2),3
+2026-10-13,Brisket Pho,3
+2026-10-13,Chicken Pho,9
+2026-10-13,Banh Mi (grilled pork),5
+2026-10-13,Bun Cha,3
+2026-10-13,Spring Rolls (2),0
+2026-10-14,Brisket Pho,7
+2026-10-14,Chicken Pho,6
+2026-10-14,Banh Mi (grilled pork),7
+2026-10-14,Bun Cha,3
+2026-10-14,Spring Rolls (2),5
+2026-10-15,Brisket Pho,8
+2026-10-15,Chicken Pho,1
+2026-10-15,Banh Mi (grilled pork),6
+2026-10-15,Bun Cha,4
+2026-10-15,Spring Rolls (2),4
+2026-10-16,Brisket Pho,12
+2026-10-16,Chicken Pho,11
+2026-10-16,Banh Mi (grilled pork),2
+2026-10-16,Bun Cha,3
+2026-10-16,Spring Rolls (2),8
+2026-10-17,Brisket Pho,10
+2026-10-17,Chicken Pho,6
+2026-10-17,Banh Mi (grilled pork),3
+2026-10-17,Bun Cha,9
+2026-10-17,Spring Rolls (2),11
+2026-10-18,Brisket Pho,4
+2026-10-18,Chicken Pho,2
+2026-10-18,Banh Mi (grilled pork),8
+2026-10-18,Bun Cha,5
+2026-10-18,Spring Rolls (2),11
+2026-10-19,Brisket Pho,7
+2026-10-19,Chicken Pho,2
+2026-10-19,Banh Mi (grilled pork),4
+2026-10-19,Bun Cha,0
+2026-10-19,Spring Rolls (2),3
+2026-10-20,Brisket Pho,5
+2026-10-20,Chicken Pho,5
+2026-10-20,Banh Mi (grilled pork),2
+2026-10-20,Bun Cha,2
+2026-10-20,Spring Rolls (2),5
+2026-10-21,Brisket Pho,7
+2026-10-21,Chicken Pho,6
+2026-10-21,Banh Mi (grilled pork),4
+2026-10-21,Bun Cha,2
+2026-10-21,Spring Rolls (2),7
+2026-10-22,Brisket Pho,7
+2026-10-22,Chicken Pho,3
+2026-10-22,Banh Mi (grilled pork),3
+2026-10-22,Bun Cha,3
+2026-10-22,Spring Rolls (2),5
+2026-10-23,Brisket Pho,9
+2026-10-23,Chicken Pho,6
+2026-10-23,Banh Mi (grilled pork),6
+2026-10-23,Bun Cha,4
+2026-10-23,Spring Rolls (2),4
+2026-10-24,Brisket Pho,10
+2026-10-24,Chicken Pho,10
+2026-10-24,Banh Mi (grilled pork),7
+2026-10-24,Bun Cha,4
+2026-10-24,Spring Rolls (2),9
+2026-10-25,Brisket Pho,5
+2026-10-25,Chicken Pho,1
+2026-10-25,Banh Mi (grilled pork),5
+2026-10-25,Bun Cha,2
+2026-10-25,Spring Rolls (2),8
+2026-10-26,Brisket Pho,3
+2026-10-26,Chicken Pho,0
+2026-10-26,Banh Mi (grilled pork),1
+2026-10-26,Bun Cha,5
+2026-10-26,Spring Rolls (2),4
+2026-10-27,Brisket Pho,2
+2026-10-27,Chicken Pho,2
+2026-10-27,Banh Mi (grilled pork),4
+2026-10-27,Bun Cha,3
+2026-10-27,Spring Rolls (2),5
+2026-10-28,Brisket Pho,9
+2026-10-28,Chicken Pho,6
+2026-10-28,Banh Mi (grilled pork),4
+2026-10-28,Bun Cha,4
+2026-10-28,Spring Rolls (2),9
+2026-10-29,Brisket Pho,9
+2026-10-29,Chicken Pho,7
+2026-10-29,Banh Mi (grilled pork),2
+2026-10-29,Bun Cha,3
+2026-10-29,Spring Rolls (2),7
+2026-10-30,Brisket Pho,8
+2026-10-30,Chicken Pho,9
+2026-10-30,Banh Mi (grilled pork),7
+2026-10-30,Bun Cha,6
+2026-10-30,Spring Rolls (2),7
+2026-10-31,Brisket Pho,17
+2026-10-31,Chicken Pho,10
+2026-10-31,Banh Mi (grilled pork),5
+2026-10-31,Bun Cha,4
+2026-10-31,Spring Rolls (2),15
+2026-11-01,Brisket Pho,6
+2026-11-01,Chicken Pho,8
+2026-11-01,Banh Mi (grilled pork),6
+2026-11-01,Bun Cha,3
+2026-11-01,Spring Rolls (2),3
+2026-11-02,Brisket Pho,6
+2026-11-02,Chicken Pho,5
+2026-11-02,Banh Mi (grilled pork),5
+2026-11-02,Bun Cha,4
+2026-11-02,Spring Rolls (2),4
+2026-11-03,Brisket Pho,7
+2026-11-03,Chicken Pho,5
+2026-11-03,Banh Mi (grilled pork),4
+2026-11-03,Bun Cha,2
+2026-11-03,Spring Rolls (2),4
+2026-11-04,Brisket Pho,8
+2026-11-04,Chicken Pho,2
+2026-11-04,Banh Mi (grilled pork),2
+2026-11-04,Bun Cha,3
+2026-11-04,Spring Rolls (2),2
+2026-11-05,Brisket Pho,5
+2026-11-05,Chicken Pho,1
+2026-11-05,Banh Mi (grilled pork),3
+2026-11-05,Bun Cha,4
+2026-11-05,Spring Rolls (2),7
+2026-11-06,Brisket Pho,8
+2026-11-06,Chicken Pho,6
+2026-11-06,Banh Mi (grilled pork),2
+2026-11-06,Bun Cha,8
+2026-11-06,Spring Rolls (2),9

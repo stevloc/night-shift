@@ -1,0 +1,41 @@
+# Night Shift's nightly run: 11:40 PM America/New_York, every night.
+#
+# GitHub cron is always UTC and has no daylight saving, so two schedules are listed:
+#   03:40 UTC = 11:40 PM EDT (summer, UTC-4)     04:40 UTC = 11:40 PM EST (winter, UTC-5)
+# The job checks the New York clock and only calls the app from the one that is really 11 PM there.
+# (GitHub can start scheduled jobs a few minutes late; the hour check allows for that.)
+name: Nightly run
+
+on:
+  schedule:
+    - cron: "40 3 * * *"
+    - cron: "40 4 * * *"
+  workflow_dispatch: {}   # "Run workflow" button for a manual test
+
+permissions: {}
+
+jobs:
+  nightly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Call POST /api/nightly-run
+        env:
+          NIGHTSHIFT_URL: ${{ secrets.NIGHTSHIFT_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          hour=$(TZ=America/New_York date +%H)
+          if [ "$EVENT" = "schedule" ] && [ "$hour" != "23" ]; then
+            echo "It is ${hour}:xx in New York; the other schedule handles tonight."
+            exit 0
+          fi
+          if [ -z "$NIGHTSHIFT_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "Missing repo secrets NIGHTSHIFT_URL and/or CRON_SECRET." >&2
+            exit 1
+          fi
+          # Render's free plan sleeps when idle: wake it, then run (retries cover the cold start).
+          curl --silent --show-error --max-time 120 --retry 5 --retry-delay 20 --retry-all-errors \
+            "${NIGHTSHIFT_URL%/}/api/health" > /dev/null
+          curl --fail-with-body --silent --show-error --max-time 600 --retry 2 --retry-delay 30 \
+            -X POST -H "X-Cron-Secret: ${CRON_SECRET}" "${NIGHTSHIFT_URL%/}/api/nightly-run"

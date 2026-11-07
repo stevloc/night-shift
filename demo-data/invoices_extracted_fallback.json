@@ -1,0 +1,120 @@
+[
+  {
+    "file": "inbox/invoice_rivermark_meats_2026-11-06.png",
+    "supplier": "Rivermark Meats (fictional)",
+    "number": "RM-20419",
+    "date": "2026-11-06",
+    "total": 501.7,
+    "lines": [
+      {
+        "description": "BEEF BRISKET CHOICE 20 LB CS",
+        "qty": 2,
+        "unit": "CS",
+        "unit_price": 134.2,
+        "amount": 268.4
+      },
+      {
+        "description": "CHKN THIGH BNLS 40 LB CS",
+        "qty": 1,
+        "unit": "CS",
+        "unit_price": 95.6,
+        "amount": 95.6
+      },
+      {
+        "description": "PORK SHOULDER BNLS 30 LB CS",
+        "qty": 1,
+        "unit": "CS",
+        "unit_price": 89.7,
+        "amount": 89.7
+      },
+      {
+        "description": "BEEF SOUP BONES 40 LB CS",
+        "qty": 1,
+        "unit": "CS",
+        "unit_price": 48.0,
+        "amount": 48.0
+      }
+    ]
+  },
+  {
+    "file": "inbox/invoice_greenleaf_produce_2026-11-06.png",
+    "supplier": "Greenleaf Produce Supply (fictional)",
+    "number": "GL-88302",
+    "date": "2026-11-06",
+    "total": 100.7,
+    "lines": [
+      {
+        "description": "THAI BASIL 5 LB CS",
+        "qty": 1,
+        "unit": "CS",
+        "unit_price": 22.5,
+        "amount": 22.5
+      },
+      {
+        "description": "BEAN SPROUTS 10 LB CS",
+        "qty": 2,
+        "unit": "CS",
+        "unit_price": 12.6,
+        "amount": 25.2
+      },
+      {
+        "description": "ONION YELLOW JBO 50 LB SK",
+        "qty": 1,
+        "unit": "SK",
+        "unit_price": 32.0,
+        "amount": 32.0
+      },
+      {
+        "description": "CARROTS JUMBO 25 LB SK",
+        "qty": 1,
+        "unit": "SK",
+        "unit_price": 21.0,
+        "amount": 21.0
+      }
+    ]
+  },
+  {
+    "file": "inbox/invoice_lotus_pantry_2026-11-06.png",
+    "supplier": "Lotus Pantry Wholesale (fictional)",
+    "number": "LP-5521",
+    "date": "2026-11-06",
+    "total": 220.2,
+    "lines": [
+      {
+        "description": "RICE STICK 3MM 30 LB CS",
+        "qty": 1,
+        "unit": "CS",
+        "unit_price": 54.0,
+        "amount": 54.0
+      },
+      {
+        "description": "RICE VERMICELLI 30 LB CS",
+        "qty": 1,
+        "unit": "CS",
+        "unit_price": 57.0,
+        "amount": 57.0
+      },
+      {
+        "description": "RICE PAPER 22CM 1 CS",
+        "qty": 1,
+        "unit": "CS",
+        "unit_price": 38.0,
+        "amount": 38.0
+      },
+      {
+        "description": "FISH SAUCE 1 GAL",
+        "qty": 2,
+        "unit": "EA",
+        "unit_price": 14.0,
+        "amount": 28.0
+      },
+      {
+        "description": "BAGUETTE 8IN 24 CT",
+        "qty": 3,
+        "unit": "CT",
+        "unit_price": 14.4,
+        "amount": 43.2
+      }
+    ]
+  }
+]
