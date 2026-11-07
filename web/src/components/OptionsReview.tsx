@@ -1,21 +1,19 @@
 // "Review my options": a compact panel in the dish's decision area.
 //   1. Code compares the options (keep / suggested / your price / your limit) from the server snapshot.
-//   2. Optionally, ONE AI decision review explains them against what the owner said.
-// Every figure comes from the server snapshot, never from the AI. The review changes nothing:
+//   2. Optionally, "Investigate this alert": one bounded AI investigation (Investigator.tsx).
+// Every figure comes from the server (snapshot or calculator), never from the AI. Nothing here changes data:
 // the owner still decides with Approve / Change price / Keep / Dismiss above.
 
-import { useEffect, useId, useMemo, useState } from "react";
-import { api, type DecisionReview, type Dish, type Evidence, type Limits, type OptionId, type PriceOption,
-  type ReviewResult, type Snapshot } from "../api";
+import { useEffect, useId, useState } from "react";
+import { api, type Dish, type Limits, type OptionId, type PriceOption, type Snapshot } from "../api";
 import { useApp } from "../context";
-import { dishName, errorText, fieldError, fieldErrors, ingredientName } from "../format";
+import { dishName, errorText, fieldError, fieldErrors } from "../format";
 import type { I18n, Key } from "../i18n";
 import { Icon } from "./Icon";
-
-const CATEGORY_ORDER = ["cost", "customer", "data_quality"] as const;
+import { Investigator } from "./Investigator";
 
 export function OptionsReview({ dish }: { dish: Dish }) {
-  const { view, i18n, announce } = useApp();
+  const { view, i18n } = useApp();
   const { t } = i18n;
   const id = useId();
   const [open, setOpen] = useState(false);
@@ -23,11 +21,7 @@ export function OptionsReview({ dish }: { dish: Dish }) {
   const [note, setNote] = useState("");
   const [snap, setSnap] = useState<Snapshot | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [result, setResult] = useState<ReviewResult | null>(null);
-  const [resultContext, setResultContext] = useState("");
-  const [loading, setLoading] = useState(false);
   const [focus, setFocus] = useState<OptionId | null>(null);
-  const context = JSON.stringify({ note: note.trim(), ...limits });
 
   // Deterministic comparison: refetched when the limit changes and whenever the app's data changes.
   useEffect(() => {
@@ -44,29 +38,9 @@ export function OptionsReview({ dish }: { dish: Dish }) {
     return () => window.clearTimeout(timer);
   }, [open, dish.id, limits.max_price, limits.max_increase, view, i18n]);
 
-  async function requestReview() {
-    if (!snap) return;
-    setLoading(true);
-    try {
-      const r = await api.review(dish.id, { ...limits, note, snapshot_version: snap.version, lang: i18n.lang });
-      setResult(r);
-      setResultContext(context);
-      setSnap(r.snapshot);
-      announce(r.status === "ok" ? t("rv_ready") : t("rv_not_ready"));
-    } catch (e) {
-      const f = fieldErrors(e);
-      setErrors(Object.keys(f).length ? f : { form: errorText(e, i18n) });
-    } finally {
-      setLoading(false);
-    }
-  }
-
   const priced = snap?.options.filter((o) => o.id !== "keep_current") ?? [];
   const shown = priced.find((o) => o.id === focus) ?? priced.find((o) => o.id === "custom")
     ?? priced.find((o) => o.id === "limit") ?? priced[0];
-  // A review is stale when the numbers or the owner's input changed since it was written.
-  const stale = !!result && !!snap && result.status === "ok"
-    && (result.snapshot.version !== snap.version || resultContext !== context);
 
   return (
     <section className="options-review" aria-labelledby={`${id}-h`}>
@@ -105,7 +79,7 @@ export function OptionsReview({ dish }: { dish: Dish }) {
 
         {snap && (
           <>
-            <OptionCards snap={snap} recommended={result?.status === "ok" && !stale ? result.review?.recommended_option_id ?? null : null} />
+            <OptionCards snap={snap} />
             {snap.conflicts.map((c) => (
               <p key={c.kind} className="notice warn"><Icon name="alert" />
                 {t(c.best_reaches_target ? "rv_conflict_ok" : "rv_conflict", {
@@ -115,17 +89,7 @@ export function OptionsReview({ dish }: { dish: Dish }) {
             {shown && <SensitivityTable snap={snap} option={shown} options={priced} onPick={setFocus} />}
             <p className="hint row"><Icon name="info" size={16} />{t("excluded")}</p>
 
-            <div className="ai-review stack">
-              <div className="row">
-                <button type="button" className="btn btn-primary" onClick={requestReview} disabled={loading || !snap}>
-                  {loading ? <span className="spinner" aria-hidden="true" /> : <Icon name="sparkle" />}
-                  {t(result?.status === "ok" ? "rv_again" : "rv_request")}
-                </button>
-                <span className="hint">{t("rv_request_hint")}</span>
-              </div>
-              {loading && <p role="status" className="hint">{t("rv_loading")}</p>}
-              {result && !loading && <ReviewOutcome result={result} snap={snap} stale={stale} />}
-            </div>
+            <Investigator dish={dish} limits={limits} note={note} version={snap.version} />
           </>
         )}
       </div>
@@ -138,13 +102,13 @@ function optionName(id: OptionId, i18n: I18n) {
 }
 
 /** One card per option: price, amount left, share of price, target and limit. Figures from the server. */
-function OptionCards({ snap, recommended }: { snap: Snapshot; recommended: OptionId | null }) {
+function OptionCards({ snap }: { snap: Snapshot }) {
   const { i18n } = useApp();
   const { t, money, pctPoints, approx } = i18n;
   return (
     <ul className="option-cards" aria-label={t("rv_options")}>
       {snap.options.map((o) => (
-        <li key={o.id} className={recommended === o.id ? "recommended" : undefined}>
+        <li key={o.id}>
           <p className="option-name">{optionName(o.id, i18n)}</p>
           <p className="option-price">{money(o.price)}</p>
           <p>{t("rv_left", { left: money(o.after.left), pct: pctPoints(o.after.margin_pct) })}</p>
@@ -157,7 +121,6 @@ function OptionCards({ snap, recommended }: { snap: Snapshot; recommended: Optio
             <p className="hint">{t("rv_change", { per: money(o.per_order_change, true) })}
               {o.monthly_change !== null && <> · {t("rv_monthly", { monthly: approx(o.monthly_change) })}</>}</p>
           )}
-          {recommended === o.id && <span className="pill good"><Icon name="check" size={16} />{t("rv_suggested_by_review")}</span>}
         </li>
       ))}
     </ul>
@@ -226,114 +189,6 @@ function thresholdText(th: NonNullable<NonNullable<PriceOption["sensitivity"]>["
   return i18n.t(`rv_threshold_${th.reason}` as Key, { option: name });
 }
 
-function ReviewOutcome({ result, snap, stale }: { result: ReviewResult; snap: Snapshot; stale: boolean }) {
-  const { i18n } = useApp();
-  const { t } = i18n;
-  if (result.status === "unavailable") {
-    return (
-      <p className="notice"><Icon name="info" />
-        {t(`rv_unavailable_${result.reason ?? "provider_error"}` as Key, { minutes: i18n.num(result.retry_minutes ?? 60) })}
-        {" "}{t("rv_unavailable_tail")}</p>
-    );
-  }
-  if (result.status === "stale") return <p className="notice warn"><Icon name="refresh" />{t("rv_stale_discarded")}</p>;
-  if (result.status === "held") return <p className="notice warn"><Icon name="pause" />{t("rv_held")}</p>;
-  if (result.status === "no_options") return <p className="notice"><Icon name="info" />{t("rv_no_options")}</p>;
-  return <ReviewBody review={result.review!} result={result} snap={snap} stale={stale} />;
-}
-
-function ReviewBody({ review, result, snap, stale }: { review: DecisionReview; result: ReviewResult; snap: Snapshot; stale: boolean }) {
-  const { i18n } = useApp();
-  const { t, money, pctPoints } = i18n;
-  const evidence = useMemo(() => new Map(result.snapshot.evidence.map((e) => [e.id, e])), [result.snapshot]);
-  // Figures for the suggested option come from the snapshot the review was written for.
-  const rec = result.snapshot.options.find((o) => o.id === review.recommended_option_id);
-  return (
-    <article className={`review-result stack ${stale ? "is-stale" : ""}`} aria-labelledby="review-h">
-      <div className="card-head">
-        <h5 id="review-h">{t("rv_title")}</h5>
-        <span className="pill neutral"><Icon name={result.provenance === "live" ? "sparkle" : "clock"} size={16} />
-          {result.provenance === "live" ? t("rv_live", { model: result.model ?? "" })
-            : t("rv_cached", { time: i18n.time(result.generated_at!) })}</span>
-      </div>
-      {stale && <p className="notice warn"><Icon name="refresh" />{t("rv_stale")}</p>}
-      {rec ? (
-        <p><strong>{t("rv_recommended", { option: optionName(rec.id, i18n), price: money(rec.price),
-          left: money(rec.after.left), pct: pctPoints(rec.after.margin_pct) })}</strong></p>
-      ) : <p><strong>{t("rv_no_recommendation")}</strong></p>}
-      <p>{review.summary}</p>
-      {CATEGORY_ORDER.map((cat) => {
-        const items = review.considerations.filter((c) => c.category === cat);
-        if (!items.length) return null;
-        return (
-          <div key={cat} className="stack-sm">
-            <h6>{t(`rv_cat_${cat}` as Key)}</h6>
-            <ul className="review-points">
-              {items.map((c, i) => (
-                <li key={i}>
-                  <p>{c.basis === "owner_reported" && <span className="tag">{t("rv_you_said")}</span>}{c.text}</p>
-                  <EvidenceLinks ids={c.evidence_ids} evidence={evidence} />
-                </li>
-              ))}
-            </ul>
-          </div>
-        );
-      })}
-      {review.uncertainties.length > 0 && (
-        <div className="stack-sm">
-          <h6>{t("rv_uncertain")}</h6>
-          <ul className="review-points">
-            {review.uncertainties.map((u, i) => (
-              <li key={i}><p>{u.text}</p><EvidenceLinks ids={u.evidence_ids} evidence={evidence} /></li>
-            ))}
-          </ul>
-        </div>
-      )}
-      {review.follow_up_question && <p><strong>{t("rv_question")}</strong> {review.follow_up_question}</p>}
-      {review.next_action && <p><strong>{t("rv_next")}</strong> {t(`action_${review.next_action}` as Key)}</p>}
-      <p className="hint row"><Icon name="info" size={16} />{t("rv_changes_nothing")}</p>
-      {snap.version !== result.snapshot.version && <p className="hint">{t("rv_version_note")}</p>}
-    </article>
-  );
-}
-
-function EvidenceLinks({ ids, evidence }: { ids: string[]; evidence: Map<string, Evidence> }) {
-  const { view, i18n } = useApp();
-  if (!ids.length) return null;
-  return (
-    <ul className="evidence-links" aria-label={i18n.t("rv_evidence")}>
-      {ids.map((eid) => {
-        const e = evidence.get(eid);
-        if (!e) return null;
-        const label = evidenceLabel(e, view, i18n);
-        const prov = i18n.t(`evp_${e.provenance}` as Key);
-        return (
-          <li key={eid} title={e.text}>
-            {e.link ? <a href={e.link}>{label}</a> : <span>{label}</span>}
-            <span className="hint"> · {prov}</span>
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
-function evidenceLabel(e: Evidence, view: ReturnType<typeof useApp>["view"], i18n: I18n) {
-  const { t } = i18n;
-  const [kind, rest] = [e.id.split(":")[0], e.id.split(":")[1]];
-  const ing = e.ingredient ? ingredientName(view, e.ingredient, i18n) : "";
-  switch (kind) {
-    case "cost": return t("evd_cost", { ingredient: ing, no: e.invoice_no ?? "" });
-    case "comparison": return t("evd_comparison", { ingredient: ing, no: e.invoice_no ?? "" });
-    case "earlier": return t("evd_earlier", { ingredient: ing, no: e.invoice_no ?? "" });
-    case "hold": return t("evd_hold", { ingredient: ing });
-    case "correction": return t("evd_correction", { no: e.invoice_no ?? "" });
-    case "conflict": return t("evd_conflict");
-    case "option": return optionName(rest as OptionId, i18n);
-    default: return t(`evd_${e.id.replace(":", "_")}` as Key);
-  }
-}
-
 /** Held dish: no price options and no AI review until the owner confirms the missing input. */
 export function HeldOptions({ dish }: { dish: Dish }) {
   const { view, i18n } = useApp();
@@ -352,6 +207,7 @@ export function HeldOptions({ dish }: { dish: Dish }) {
       </ul>
       <p className="hint">{t("rv_held_why", { dish: dishName(view, dish.id, i18n) })}</p>
       <a href="#/invoices">{t("review_now")} <Icon name="chevron" size={16} /></a>
+      <Investigator dish={dish} />
     </section>
   );
 }

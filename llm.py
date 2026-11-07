@@ -12,6 +12,9 @@
 2. review_decision(): one owner-triggered "Review my options" call (review.py builds the prompt from
    the code-computed snapshot and validates the answer). Bounded timeout and output, no retries.
 
+3. chat_turn(): one turn of the "Investigate this alert" tool loop (investigate.py runs the loop, the
+   allowlisted tools and every limit). Same key and model; no retries.
+
 The API key is read from the environment only (OPENROUTER_API_KEY).
 """
 
@@ -161,3 +164,34 @@ def review_decision(system, user):
         messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
     )
     return _parse_json(response.choices[0].message.content or "")
+
+
+# ------------------------------------------------------------------ investigator (tool calling)
+
+_TOOL_SUPPORT = {}   # model -> True / False, from OpenRouter's model list (checked once per process)
+
+
+def supports_tools(timeout=5):
+    """True / False if OpenRouter lists whether the configured model accepts `tools`; None if unknown."""
+    if MODEL in _TOOL_SUPPORT:
+        return _TOOL_SUPPORT[MODEL]
+    try:
+        import httpx
+        r = httpx.get("https://openrouter.ai/api/v1/models", timeout=timeout)
+        r.raise_for_status()
+        model = next((m for m in r.json().get("data", []) if m.get("id") == MODEL), None)
+    except Exception as error:
+        print(f"[night-shift] could not check tool support: {type(error).__name__}")
+        return None   # unknown: try the call; a provider error is reported as unavailable
+    _TOOL_SUPPORT[MODEL] = bool(model and "tools" in (model.get("supported_parameters") or []))
+    return _TOOL_SUPPORT[MODEL]
+
+
+def chat_turn(messages, tools, final, timeout, max_tokens=900):
+    """One model turn. `final` keeps the tool list visible but forbids calling it (tool_choice="none").
+    Returns the assistant message (content + tool_calls); raises on any failure."""
+    response = _client(timeout=timeout, max_retries=0).chat.completions.create(
+        model=MODEL, temperature=0, max_tokens=max_tokens, messages=messages,
+        tools=tools, tool_choice="none" if final else "auto",
+    )
+    return response.choices[0].message

@@ -122,6 +122,11 @@ ORDER_HISTORY = {k: {"orders": n, "days": FORECAST_WINDOW_DAYS, "from": _window_
 
 # ---------------------------------------------------------------- where today's prices came from
 _last_delivery = max(r["date"] for r in _rows("price_history.csv"))
+# Dated pack prices from past deliveries (newest last). The file has no pack size: it is the
+# ingredient's standard pack from ingredients.csv, and the investigator says so.
+PRICE_HISTORY = {k: [] for k in INGREDIENTS}
+for r in sorted(_rows("price_history.csv"), key=lambda r: r["date"]):
+    PRICE_HISTORY[r["ingredient_id"]].append({"date": r["date"], "pack_price": float(r["pack_price"])})
 PREVIOUS_INVOICES = {k: ("Price history:", "last delivery", _last_delivery) for k in INGREDIENTS}
 
 # ---------------------------------------------------------------- tonight's inbox

@@ -8,6 +8,7 @@ Run locally:   uvicorn api:app --port 8000      (or: python api.py, which reads 
 
 import asyncio
 import contextlib
+import copy
 import hmac
 import os
 import re
@@ -20,6 +21,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import engine
+import investigate
+import llm
 import options
 import review
 from auth import AuthError, SupabaseAuth
@@ -36,7 +39,7 @@ ERROR_STATUS = {"too_large": 413, "bad_file": 415, "rate_limited": 429, "ai_not_
 PUBLIC_PATHS = {"/api/health", "/api/config", "/api/nightly-run"}
 # The AI decision review must not hold the restaurant's lock while it waits for the model:
 # the route takes the lock itself, before and after the call (and never saves anything).
-UNLOCKED_PATH = re.compile(r"^/api/dishes/[^/]+/review$")
+UNLOCKED_PATH = re.compile(r"^/api/dishes/[^/]+/(review|investigate)$")
 
 # Production (Supabase) vs. local demo mode (in-memory sandboxes keyed by a cookie).
 if CONFIG.supabase_enabled:
@@ -417,6 +420,40 @@ async def review_options(dish_id: str, body: ReviewRequest, request: Request):
     if fresh["version"] != snap["version"]:
         return {"snapshot": fresh, "status": "stale"}  # discard: written for numbers that no longer apply
     return {**out, "status": "ok", **review.store(key, result, snap)}
+
+
+@app.post("/api/dishes/{dish_id}/investigate")
+async def investigate_alert(dish_id: str, body: ReviewRequest, request: Request):
+    """"Investigate this alert": one bounded tool-using investigation (investigate.py).
+
+    The tools run on a private copy of this restaurant's state, so nothing the investigation does can change
+    invoices, costs, recipes, prices or decisions. Every outcome keeps the deterministic snapshot.
+    status: ok | stale | unavailable (reason: ai_not_configured | rate_limited | tools_unsupported |
+            timeout | deadline | provider_error | invalid_output | incomplete)
+    """
+    _dish(dish_id)
+    lang = body.lang if body.lang in ("en", "es") else "en"
+    async with _bound_state(request):
+        context = _context(dish_id, body.note, body.max_price, body.max_increase)
+        snap = options.snapshot(dish_id, context)
+        private = copy.deepcopy(engine.STATE._d())        # read-only copy for the tools
+    out = {"snapshot": snap, "events": []}
+    if body.snapshot_version and body.snapshot_version != snap["version"]:
+        return {**out, "status": "stale"}
+    if not CONFIG.openrouter_api_key:
+        return {**out, "status": "unavailable", "reason": "ai_not_configured"}
+    if await run_in_threadpool(llm.supports_tools) is False:
+        return {**out, "status": "unavailable", "reason": "tools_unsupported", "model": llm.MODEL}
+    allowed, wait = review.REVIEWS.take(_client_ip(request))   # shares the AI-review bucket
+    if not allowed:
+        return {**out, "status": "unavailable", "reason": "rate_limited", "retry_minutes": max(1, -(-int(wait) // 60))}
+
+    result = await run_in_threadpool(investigate.run, private, dish_id, context, lang)
+    async with _bound_state(request):
+        fresh = options.snapshot(dish_id, context)
+    if fresh["version"] != snap["version"]:
+        return {"snapshot": fresh, "events": result["events"], "status": "stale"}
+    return {**out, **result}
 
 
 @app.post("/api/corrections/{correction_id}")
